@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<host-apdu-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/ngoda_tap_description"
+    android:requireDeviceUnlock="false">
+
+    <aid-group
+        android:category="other"
+        android:description="@string/ngoda_tap_description">
+
+        <aid-filter
+            android:name="F222222222" />
+
+    </aid-group>
+
+</host-apdu-service>

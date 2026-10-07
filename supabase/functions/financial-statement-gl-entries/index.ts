@@ -1,0 +1,311 @@
+import {
+  errorResponse,
+  successResponse,
+} from "../../_shared/api-response.ts";
+
+import {
+  createSupabaseClient,
+} from "../../_shared/supabase-client.ts";
+
+import {
+  AppError,
+} from "../../_shared/app-error.ts";
+
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 100;
+
+
+function parseRequiredString(
+  value: string | null,
+  errorMessage: string,
+): string {
+  if (
+    value == null ||
+    value.trim() === ""
+  ) {
+    throw new AppError(
+      errorMessage,
+      400,
+    );
+  }
+
+  return value.trim();
+}
+
+
+function parseRequiredDate(
+  value: string | null,
+  errorMessage: string,
+): string {
+  const dateValue =
+    parseRequiredString(
+      value,
+      errorMessage,
+    );
+
+  /*
+   * SQL RPC expects YYYY-MM-DD.
+   */
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(
+      dateValue,
+    )
+  ) {
+    throw new AppError(
+      errorMessage,
+      400,
+    );
+  }
+
+  /*
+   * Validate that it represents a real calendar date.
+   */
+  const parsed =
+    new Date(
+      `${dateValue}T00:00:00.000Z`,
+    );
+
+  if (
+    Number.isNaN(
+      parsed.getTime(),
+    ) ||
+    parsed.toISOString().substring(
+      0,
+      10,
+    ) !== dateValue
+  ) {
+    throw new AppError(
+      errorMessage,
+      400,
+    );
+  }
+
+  return dateValue;
+}
+
+
+function parsePositiveInteger(
+  value: string | null,
+  defaultValue: number,
+  errorMessage: string,
+): number {
+  if (
+    value == null ||
+    value.trim() === ""
+  ) {
+    return defaultValue;
+  }
+
+  const parsed =
+    Number(value);
+
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < 1
+  ) {
+    throw new AppError(
+      errorMessage,
+      400,
+    );
+  }
+
+  return parsed;
+}
+
+
+Deno.serve(
+  async (
+    req: Request,
+  ): Promise<Response> => {
+    try {
+      /*
+       * This endpoint is read-only.
+       */
+      if (
+        req.method !== "GET"
+      ) {
+        return errorResponse(
+          "METHOD_NOT_ALLOWED",
+        );
+      }
+
+      /*
+       * Use the authenticated user's Supabase client.
+       *
+       * The SQL function performs the actual authentication
+       * and authorization using auth.uid() and has_role().
+       */
+      const supabase =
+        createSupabaseClient(req);
+
+      const url =
+        new URL(req.url);
+
+      /*
+       * Required GL account.
+       */
+      const gl =
+        parseRequiredString(
+          url.searchParams.get(
+            "gl",
+          ),
+          "GL_IS_REQUIRED",
+        );
+
+      /*
+       * Required statement currency.
+       */
+      const currency =
+        parseRequiredString(
+          url.searchParams.get(
+            "currency",
+          ),
+          "CURRENCY_IS_REQUIRED",
+        ).toLowerCase();
+
+      /*
+       * Required statement date range.
+       */
+      const startDate =
+        parseRequiredDate(
+          url.searchParams.get(
+            "startDate",
+          ),
+          "INVALID_START_DATE",
+        );
+
+      const endDate =
+        parseRequiredDate(
+          url.searchParams.get(
+            "endDate",
+          ),
+          "INVALID_END_DATE",
+        );
+
+      if (
+        startDate > endDate
+      ) {
+        throw new AppError(
+          "INVALID_DATE_RANGE",
+          400,
+        );
+      }
+
+      /*
+       * Pagination.
+       */
+      const page =
+        parsePositiveInteger(
+          url.searchParams.get(
+            "page",
+          ),
+          DEFAULT_PAGE,
+          "INVALID_PAGE",
+        );
+
+      const pageSize =
+        parsePositiveInteger(
+          url.searchParams.get(
+            "pageSize",
+          ),
+          DEFAULT_PAGE_SIZE,
+          "INVALID_PAGE_SIZE",
+        );
+
+      if (
+        pageSize >
+        MAX_PAGE_SIZE
+      ) {
+        throw new AppError(
+          "INVALID_PAGE_SIZE",
+          400,
+        );
+      }
+
+      /*
+       * Do not pass country_code.
+       *
+       * The SQL function derives the trusted country from:
+       *
+       * auth.uid()
+       *      ↓
+       * fetch_user_by_id(...)
+       *      ↓
+       * users.country_code
+       *
+       * The SQL function also enforces the allowed roles:
+       *
+       * finance
+       * accounts
+       * treasury
+       */
+      const {
+        data,
+        error,
+      } = await supabase.rpc(
+        "fetch_financial_statement_gl_entries",
+        {
+          p_gl:
+            gl,
+
+          p_currency_code:
+            currency,
+
+          p_start_date:
+            startDate,
+
+          p_end_date:
+            endDate,
+
+          p_page:
+            page,
+
+          p_page_size:
+            pageSize,
+        },
+      );
+
+      if (error) {
+        console.error(
+          "fetch_financial_statement_gl_entries RPC error:",
+          error,
+        );
+
+        /*
+         * Preserve the error generated by the SQL function,
+         * including UNAUTHENTICATED, FORBIDDEN and validation
+         * errors.
+         */
+        throw new AppError(
+          error.message,
+          error.code === "42501"
+            ? 403
+            : 400,
+        );
+      }
+
+      return successResponse(
+        data,
+      );
+    } catch (error) {
+      console.error(
+        "financial-statement-gl-entries error:",
+        error,
+      );
+
+      if (
+        error instanceof AppError
+      ) {
+        return errorResponse(
+          error.message,
+        );
+      }
+
+      return errorResponse(
+        "FAILED_TO_FETCH_FINANCIAL_STATEMENT_GL_ENTRIES",
+      );
+    }
+  },
+);
