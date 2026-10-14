@@ -71,10 +71,13 @@ class TreasuryApiService {
     return TokenGLSummary.fromJson(data);
   }
 
-  Future<void> executeTokenAdjustment({required String id}) async {
+  Future<void> executeTokenAdjustment({
+    required String id,
+    required String blockchainCode,
+  }) async {
     await _functions.invokeVoid(
       functionName: 'gold-token-adjustment-execution',
-      body: {'adjustment_request_id': id},
+      body: {'adjustment_request_id': id, 'blockchain_code': blockchainCode},
     );
   }
 

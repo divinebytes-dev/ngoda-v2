@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:ngoda/data_models/blockchain/blockchain_wallet_balance.dart';
 import 'package:ngoda/data_models/currency/currency_balance.dart';
 import 'package:ngoda/data_models/wallet/wallet_balance_summary.dart';
 import 'package:ngoda/services/currency_service.dart';
@@ -24,18 +25,16 @@ class MultiWalletBalanceSummaryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final walletSummary = ref.watch(multiWalletSummaryProvider);
-
     final role = getCurrentUser().role;
     final isMerchant = role == 'merchant';
+
     void closeScreen() {
       ref.invalidate(multiWalletSummaryProvider);
-
       context.pop();
     }
 
     Future<void> refresh() async {
       ref.invalidate(multiWalletSummaryProvider);
-
       await ref.read(multiWalletSummaryProvider.future);
     }
 
@@ -45,7 +44,7 @@ class MultiWalletBalanceSummaryScreen extends ConsumerWidget {
         child: Column(
           children: [
             isMerchant
-                ? ScreenHeader(title: 'Wallet Balance Summary')
+                ? const ScreenHeader(title: 'Wallet Balance Summary')
                 : ViewHeader(
                     title: 'Wallet Balance Summary',
                     onClose: closeScreen,
@@ -58,11 +57,9 @@ class MultiWalletBalanceSummaryScreen extends ConsumerWidget {
                     message: 'Loading wallet summary',
                     fullScreen: true,
                   ),
-                  error: (error, stackTrace) {
-                    return _RefreshableState(
-                      child: AppErrorState(message: error.toString()),
-                    );
-                  },
+                  error: (error, _) => _RefreshableState(
+                    child: AppErrorState(message: error.toString()),
+                  ),
                   data: (data) {
                     if (data.error != null) {
                       return _RefreshableState(
@@ -159,9 +156,19 @@ class _MultiWalletSummaryContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final spacing = context.spacing;
 
-    final hasBalances = wallets.any(
-      (wallet) => wallet.summary.sortedCurrencyList.isNotEmpty,
-    );
+    final hasBalances = wallets.any((wallet) {
+      final hasFiat = wallet.summary.sortedCurrencyList.any(
+        (currency) => currency.toLowerCase() != 'gold',
+      );
+
+      final hasGold =
+          wallet.ownerType == 'customer' &&
+          wallet.summary.blockchainBalances.any(
+            (balance) => balance.currencyCode.toLowerCase() == 'gold',
+          );
+
+      return hasFiat || hasGold;
+    });
 
     if (!hasBalances) {
       return const _EmptyWalletSummary();
@@ -177,10 +184,7 @@ class _MultiWalletSummaryContent extends StatelessWidget {
       ),
       children: [
         for (var index = 0; index < wallets.length; index++) ...[
-          _WalletSummarySection(
-            item: wallets[index],
-            walletOwner: wallets[index].ownerType,
-          ),
+          _WalletSummarySection(item: wallets[index]),
           if (index < wallets.length - 1) SizedBox(height: spacing.xl),
         ],
       ],
@@ -189,59 +193,82 @@ class _MultiWalletSummaryContent extends StatelessWidget {
 }
 
 class _WalletSummarySection extends StatelessWidget {
-  const _WalletSummarySection({required this.item, required this.walletOwner});
+  const _WalletSummarySection({required this.item});
 
   final _WalletSummaryItem item;
-  final String walletOwner;
 
   @override
   Widget build(BuildContext context) {
     final spacing = context.spacing;
-
     final summary = item.summary;
-    final currencies = summary.sortedCurrencyList.toList();
+    final walletOwner = item.ownerType;
 
-    final user = getCurrentUser();
+    // GOLD is not a fiat currency and must not appear here.
+    final fiatCurrencies = summary.sortedCurrencyList
+        .where((currency) => currency.toLowerCase() != 'gold')
+        .toList();
 
-    String path = '/vendor-wallet/';
+    // GOLD balances are separated by blockchain.
+    // Only the Personal Wallet displays blockchain balances.
+    final List<BlockchainWalletBalance> blockchainBalances =
+        walletOwner == 'customer'
+        ? summary.blockchainBalances
+              .where((balance) => balance.currencyCode.toLowerCase() == 'gold')
+              .toList()
+        : [];
 
-    if (user.role == 'agent') {
-      path = '/agent-wallet/';
-    } else if (user.role == 'merchant') {
-      path = '/merchant-wallet/';
+    final role = getCurrentUser().role;
+
+    String basePath = '/vendor-wallet/';
+
+    if (role == 'agent') {
+      basePath = '/agent-wallet/';
+    } else if (role == 'merchant') {
+      basePath = '/merchant-wallet/';
     }
+
+    final walletPath = '$basePath$walletOwner/';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _WalletHeader(title: item.title, ownerType: item.ownerType),
-
+        _WalletHeader(title: item.title, ownerType: walletOwner),
         SizedBox(height: spacing.sm),
-
         _TotalBalanceCard(
           totalBalance: summary.totalUsdValue,
-          ownerType: item.ownerType,
+          ownerType: walletOwner,
           children: [
-            const _SectionHeader(
-              title: 'Balance breakdown',
-              description: 'Your available wallet balances by currency.',
-            ),
-
-            SizedBox(height: spacing.sm),
-
-            if (currencies.isEmpty)
-              const _EmptyWalletSection()
-            else
-              for (var index = 0; index < currencies.length; index++) ...[
+            if (fiatCurrencies.isNotEmpty) ...[
+              const _SectionHeader(
+                title: 'Balance breakdown',
+                description: 'Your available fiat wallet balances by currency.',
+              ),
+              SizedBox(height: spacing.sm),
+              for (var index = 0; index < fiatCurrencies.length; index++) ...[
                 _buildCurrencyCard(
                   context: context,
                   summary: summary,
-                  currencyCode: currencies[index],
-                  path: path,
+                  currencyCode: fiatCurrencies[index],
+                  path: walletPath,
                 ),
-
-                if (index < currencies.length - 1) SizedBox(height: spacing.sm),
+                if (index < fiatCurrencies.length - 1)
+                  SizedBox(height: spacing.sm),
               ],
+            ],
+            if (blockchainBalances.isNotEmpty) ...[
+              if (fiatCurrencies.isNotEmpty) SizedBox(height: spacing.lg),
+              const _SectionHeader(
+                title: 'Blockchain breakdown',
+                description: 'Your GOLD holdings on each supported blockchain.',
+              ),
+              SizedBox(height: spacing.sm),
+              _BlockchainBreakdownCard(
+                balances: blockchainBalances,
+                path: walletPath,
+              ),
+            ],
+            if (fiatCurrencies.isEmpty && blockchainBalances.isEmpty)
+              const _EmptyWalletSection(),
           ],
         ),
       ],
@@ -264,11 +291,8 @@ class _WalletSummarySection extends StatelessWidget {
       currencyCode: currencyCode,
       balance: balance,
       onTap: () {
-        context.push(
-          '$path'
-          '${walletOwner.toLowerCase()}/'
-          '${currencyCode.toLowerCase()}',
-        );
+        // Fiat navigation does not pass a blockchain code.
+        context.push('$path${currencyCode.toLowerCase()}');
       },
     );
   }
@@ -283,9 +307,7 @@ class _WalletHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final spacing = context.spacing;
-    final iconSize = context.iconSize;
     final colorScheme = context.colorScheme;
-
     final sectionColor = _walletSectionColor(ownerType, colorScheme);
 
     return Row(
@@ -298,13 +320,11 @@ class _WalletHeader extends StatelessWidget {
           ),
           child: Icon(
             _walletIcon(ownerType),
-            size: iconSize.xl,
+            size: context.iconSize.xl,
             color: sectionColor,
           ),
         ),
-
         SizedBox(width: spacing.sm),
-
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -315,9 +335,7 @@ class _WalletHeader extends StatelessWidget {
                   context,
                 ).copyWith(color: sectionColor, fontWeight: FontWeight.w700),
               ),
-
               SizedBox(height: spacing.xs),
-
               Text(
                 _walletDescription(ownerType),
                 style: AppTextStyles.tiny(
@@ -352,9 +370,7 @@ class _SectionHeader extends StatelessWidget {
             context,
           ).copyWith(fontWeight: FontWeight.w700),
         ),
-
         SizedBox(height: spacing.xs),
-
         Text(
           description,
           style: AppTextStyles.tiny(
@@ -381,17 +397,15 @@ class _TotalBalanceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final spacing = context.spacing;
     final colorScheme = context.colorScheme;
-    final iconSize = context.iconSize;
-
     final sectionColor = _walletSectionColor(ownerType, colorScheme);
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(spacing.lg),
+      padding: EdgeInsets.all(spacing.sm),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor, //colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(spacing.md),
-        border: Border.all(color: sectionColor.withValues(alpha: 0.2)),
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(context.radius.cardRadius),
+        border: Border.all(color: sectionColor.withValues(alpha: 0.09)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -407,12 +421,10 @@ class _TotalBalanceCard extends StatelessWidget {
                 child: Icon(
                   _walletIcon(ownerType),
                   color: sectionColor,
-                  size: iconSize.large,
+                  size: context.iconSize.large,
                 ),
               ),
-
               SizedBox(width: spacing.sm),
-
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -423,9 +435,7 @@ class _TotalBalanceCard extends StatelessWidget {
                         context,
                       ).copyWith(fontWeight: FontWeight.w600),
                     ),
-
                     SizedBox(height: spacing.xs),
-
                     Text(
                       'USD equivalent across all currencies',
                       style: AppTextStyles.tiny(
@@ -437,18 +447,14 @@ class _TotalBalanceCard extends StatelessWidget {
               ),
             ],
           ),
-
           SizedBox(height: spacing.lg),
-
           Text(
             NumberFormatService.formatAmount(totalBalance, currency: 'usd'),
             style: AppTextStyles.mediumNumber(
               context,
             ).copyWith(color: sectionColor),
           ),
-
           SizedBox(height: spacing.lg),
-
           ...children,
         ],
       ),
@@ -473,13 +479,12 @@ class _CurrencyBalanceCard extends StatelessWidget {
     final colorScheme = context.colorScheme;
 
     final currencyName = CurrencyService.name(currencyCode);
-
     final currencySymbol = CurrencyService.symbol(currencyCode);
 
     return Material(
       color: Theme.of(context).cardColor,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(spacing.md),
+        borderRadius: BorderRadius.circular(context.radius.cardRadius),
         side: BorderSide(
           color: colorScheme.outlineVariant.withValues(alpha: 0.09),
         ),
@@ -487,15 +492,12 @@ class _CurrencyBalanceCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(spacing.md),
         child: Padding(
-          padding: EdgeInsets.all(spacing.md),
+          padding: EdgeInsets.all(spacing.sm),
           child: Row(
             children: [
               _CurrencyIcon(code: currencyCode, symbol: currencySymbol),
-
-              SizedBox(width: spacing.md),
-
+              SizedBox(width: spacing.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -508,9 +510,7 @@ class _CurrencyBalanceCard extends StatelessWidget {
                         context,
                       ).copyWith(fontWeight: FontWeight.w600),
                     ),
-
                     SizedBox(height: spacing.xs),
-
                     Text(
                       currencyCode.toUpperCase(),
                       style: AppTextStyles.tiny(
@@ -520,9 +520,7 @@ class _CurrencyBalanceCard extends StatelessWidget {
                   ],
                 ),
               ),
-
               SizedBox(width: spacing.sm),
-
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -533,9 +531,7 @@ class _CurrencyBalanceCard extends StatelessWidget {
                     ),
                     style: AppTextStyles.smallNumber(context),
                   ),
-
                   SizedBox(height: spacing.xs),
-
                   Text(
                     NumberFormatService.formatAmount(
                       balance.usdValue,
@@ -547,12 +543,165 @@ class _CurrencyBalanceCard extends StatelessWidget {
                   ),
                 ],
               ),
-
               SizedBox(width: spacing.sm),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: context.iconSize.medium,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
+class _BlockchainBreakdownCard extends StatelessWidget {
+  const _BlockchainBreakdownCard({required this.balances, required this.path});
+
+  final List<BlockchainWalletBalance> balances;
+  final String path;
+
+  @override
+  Widget build(BuildContext context) {
+    final spacing = context.spacing;
+    final colorScheme = context.colorScheme;
+
+    final sortedBalances = [...balances]
+      ..sort(
+        (first, second) =>
+            first.blockchainCode.compareTo(second.blockchainCode),
+      );
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(spacing.sm),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(context.radius.cardRadius),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+        ),
+      ),
+      child: Column(
+        children: [
+          for (var index = 0; index < sortedBalances.length; index++) ...[
+            _BlockchainBalanceRow(
+              balance: sortedBalances[index],
+              onTap: () {
+                final balance = sortedBalances[index];
+
+                context.push(
+                  '$path${balance.currencyCode.toLowerCase()}',
+                  extra: balance.blockchainCode,
+                );
+              },
+            ),
+            if (index < sortedBalances.length - 1) SizedBox(height: spacing.sm),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _BlockchainBalanceRow extends StatelessWidget {
+  const _BlockchainBalanceRow({required this.balance, required this.onTap});
+
+  final BlockchainWalletBalance balance;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final spacing = context.spacing;
+    final colorScheme = context.colorScheme;
+
+    final blockchainCode = balance.blockchainCode.trim();
+
+    final blockchainName = blockchainCode.isEmpty
+        ? 'Unknown blockchain'
+        : '${blockchainCode[0].toUpperCase()}'
+              '${blockchainCode.substring(1)}';
+
+    final currencyCode = balance.currencyCode;
+
+    return Material(
+      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+      borderRadius: BorderRadius.circular(context.radius.md),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.all(spacing.sm),
+          child: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(spacing.sm),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.account_tree_outlined,
+                  color: colorScheme.primary,
+                  size: context.iconSize.medium,
+                ),
+              ),
+              SizedBox(width: spacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      blockchainName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.small(
+                        context,
+                      ).copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    SizedBox(height: spacing.xs),
+                    Text(
+                      currencyCode.toUpperCase(),
+                      style: AppTextStyles.tiny(
+                        context,
+                      ).copyWith(color: colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(width: spacing.sm),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    NumberFormatService.formatAmount(
+                      balance.balance,
+                      currency: currencyCode,
+                    ),
+                    style: AppTextStyles.smallNumber(context).copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  SizedBox(height: spacing.xs),
+                  Text(
+                    NumberFormatService.formatAmount(
+                      balance.usdValue,
+                      currency: 'usd',
+                    ),
+                    style: AppTextStyles.tinyNumber(
+                      context,
+                    ).copyWith(color: colorScheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+              SizedBox(width: spacing.sm),
               Icon(
                 Icons.chevron_right_rounded,
                 color: colorScheme.onSurfaceVariant,
+                size: context.iconSize.medium,
               ),
             ],
           ),
@@ -589,13 +738,9 @@ class _CurrencyIcon extends StatelessWidget {
       ),
       child: Text(
         symbol.isNotEmpty ? symbol : fallback,
-        style: symbol == 'GOLD'
-            ? AppTextStyles.tiny(
-                context,
-              ).copyWith(color: _gold, fontWeight: FontWeight.w700)
-            : AppTextStyles.small(
-                context,
-              ).copyWith(color: _gold, fontWeight: FontWeight.w700),
+        style: AppTextStyles.small(
+          context,
+        ).copyWith(color: _gold, fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -623,7 +768,7 @@ class _EmptyWalletSection extends StatelessWidget {
       padding: EdgeInsets.all(spacing.md),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(spacing.md),
+        borderRadius: BorderRadius.circular(context.radius.md),
       ),
       child: Text(
         'No wallet balances available',
@@ -648,7 +793,7 @@ class _RefreshableState extends StatelessWidget {
       children: [
         SizedBox(
           height: MediaQuery.sizeOf(context).height * 0.65,
-          child: child,
+          child: Center(child: child),
         ),
       ],
     );
@@ -659,13 +804,10 @@ Color _walletSectionColor(String ownerType, ColorScheme colorScheme) {
   switch (ownerType) {
     case 'merchant':
       return const Color(0xFFD4AF37);
-
     case 'agent':
       return const Color(0xFF3B82F6);
-
     case 'customer':
       return const Color(0xFF16A34A);
-
     default:
       return colorScheme.primary;
   }
@@ -675,13 +817,10 @@ IconData _walletIcon(String ownerType) {
   switch (ownerType) {
     case 'merchant':
       return Icons.storefront_outlined;
-
     case 'agent':
       return Icons.account_balance_wallet_outlined;
-
     case 'customer':
       return Icons.person_outline;
-
     default:
       return Icons.wallet_outlined;
   }
@@ -691,13 +830,10 @@ String _walletDescription(String ownerType) {
   switch (ownerType) {
     case 'merchant':
       return 'Merchant funds';
-
     case 'agent':
       return 'Agent funds';
-
     case 'customer':
       return 'Personal funds';
-
     default:
       return 'Wallet funds';
   }

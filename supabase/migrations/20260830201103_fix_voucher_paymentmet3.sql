@@ -1,0 +1,20 @@
+DROP FUNCTION IF EXISTS public.record_financial_activity(
+    text,
+    text,
+    text,
+    text,
+    integer,
+    integer,
+    text,
+    public.financial_activity_type,
+    numeric,
+    numeric,
+    numeric,
+    numeric,
+    numeric,
+    numeric,
+    numeric,
+    numeric,
+    numeric,
+    numeric
+);

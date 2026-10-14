@@ -40,10 +40,10 @@ class FinancialStatementsScreen extends StatelessWidget {
             Expanded(
               child: SingleChildScrollView(
                 padding: EdgeInsets.fromLTRB(
-                  spacing.padding,
+                  spacing.sm,
                   0,
-                  spacing.padding,
-                  spacing.lg,
+                  spacing.sm,
+                  spacing.sm,
                 ),
                 child: Column(
                   children: [
@@ -53,8 +53,11 @@ class FinancialStatementsScreen extends StatelessWidget {
                       padding: EdgeInsets.all(spacing.md),
                       decoration: BoxDecoration(
                         color: colorScheme.surfaceContainer,
-                        borderRadius: BorderRadius.circular(
-                          radius.borderRadius,
+                        borderRadius: BorderRadius.circular(radius.cardRadius),
+                        border: Border.all(
+                          color: colorScheme.outlineVariant.withValues(
+                            alpha: 0.09,
+                          ),
                         ),
                       ),
                       child: Column(
@@ -70,7 +73,7 @@ class FinancialStatementsScreen extends StatelessWidget {
                               );
                             },
                           ),
-                          SizedBox(height: spacing.md),
+                          SizedBox(height: spacing.sm),
                           ActionTile(
                             title: 'Profit and Loss',
                             subtitle: 'Profit and loss statement',
@@ -80,7 +83,7 @@ class FinancialStatementsScreen extends StatelessWidget {
                               context.push('/financial-statements/profit-loss');
                             },
                           ),
-                          SizedBox(height: spacing.md),
+                          SizedBox(height: spacing.sm),
                           ActionTile(
                             title: 'Balance Sheet',
                             subtitle: 'Balance sheet statement',

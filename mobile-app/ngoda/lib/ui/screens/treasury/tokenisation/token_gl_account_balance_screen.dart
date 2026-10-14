@@ -323,7 +323,7 @@ class _GlAccountCard extends StatelessWidget {
             currency: currency,
           );
 
-          context.push('/profile/gl-balances/$params', extra: params);
+          context.push('/tokens/gl-balances/$params', extra: params);
         },
         child: Padding(
           padding: EdgeInsets.all(spacing.lg),

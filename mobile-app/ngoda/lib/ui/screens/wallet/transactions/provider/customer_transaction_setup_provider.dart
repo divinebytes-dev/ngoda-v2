@@ -8,7 +8,7 @@ import 'package:ngoda/ui/screens/vendor/provider/vendor_dashboard_provider.dart'
 final customerTransactionSetupProvider =
     Provider<AsyncValue<CustomerTransactionSetup>>((ref) {
       final user = getCurrentUser();
-      print("role ${user.role} user $user");
+
       switch (user.role) {
         case 'agent':
           final dashboardAsync = ref.watch(agentDashboardProvider);
@@ -26,11 +26,15 @@ final customerTransactionSetupProvider =
               balances: result.customerWallet.currencies.map(
                 (key, value) => MapEntry(key, value.balance),
               ),
+              blockchainBalances: {
+                for (final balance in result.blockchainBalances)
+                  if (balance.currencyCode == 'gold')
+                    balance.blockchainCode: balance.balance,
+              },
             );
           });
 
         case 'vendor':
-          print("fetch vendor");
           final dashboardAsync = ref.watch(vendorDashboardProvider);
 
           return dashboardAsync.whenData((response) {
@@ -46,12 +50,17 @@ final customerTransactionSetupProvider =
               balances: result.customerWallet.currencies.map(
                 (key, value) => MapEntry(key, value.balance),
               ),
+              blockchainBalances: {
+                for (final balance in result.blockchainBalances)
+                  if (balance.currencyCode == 'gold')
+                    balance.blockchainCode: balance.balance,
+              },
             );
           });
 
         default:
           final dashboardAsync = ref.watch(customerDashboardProvider);
-          print("fetch customer");
+
           return dashboardAsync.whenData((response) {
             final result = response.result;
 
@@ -65,6 +74,11 @@ final customerTransactionSetupProvider =
               balances: result.wallet.currencies.map(
                 (key, value) => MapEntry(key, value.balance),
               ),
+              blockchainBalances: {
+                for (final balance in result.blockchainBalances)
+                  if (balance.currencyCode == 'gold')
+                    balance.blockchainCode: balance.balance,
+              },
             );
           });
       }

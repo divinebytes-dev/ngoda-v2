@@ -158,7 +158,9 @@ class _DateRangeCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainer,
             borderRadius: BorderRadius.circular(radius.borderRadius),
-            border: Border.all(color: colorScheme.outlineVariant),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+            ),
           ),
           child: Row(
             children: [
@@ -330,7 +332,10 @@ class _CurrencyTabs extends StatelessWidget {
       padding: EdgeInsets.all(spacing.xs),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(radius.borderRadius),
+        borderRadius: BorderRadius.circular(radius.cardRadius),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+        ),
       ),
       child: TabBar(
         controller: controller,
@@ -374,15 +379,18 @@ class _TotalsBar extends StatelessWidget {
     return Container(
       margin: EdgeInsets.all(spacing.sm),
       padding: EdgeInsets.all(spacing.xs),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(radius.borderRadius),
-      ),
+      // decoration: BoxDecoration(
+      //   color: colorScheme.surfaceContainer,
+      //   borderRadius: BorderRadius.circular(radius.cardRadius),
+      // ),
       child: Container(
         padding: EdgeInsets.all(spacing.sm),
         decoration: BoxDecoration(
           color: colorScheme.surface,
-          borderRadius: BorderRadius.circular(radius.borderRadius),
+          borderRadius: BorderRadius.circular(radius.cardRadius),
+          border: Border.all(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+          ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,

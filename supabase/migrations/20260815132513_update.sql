@@ -1,0 +1,400 @@
+CREATE OR REPLACE FUNCTION public.build_my_admin_dashboard()
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+declare
+    v_total_users integer := 0;
+    v_total_credit_agents integer := 0;
+
+    v_global_role_counts jsonb :=
+        '{}'::jsonb;
+
+    v_roles jsonb :=
+        '[]'::jsonb;
+
+    v_operational_countries jsonb :=
+        '[]'::jsonb;
+
+    v_countries jsonb :=
+        '[]'::jsonb;
+
+    v_country record;
+    v_country_role_counts jsonb;
+    v_country_total_users integer;
+    v_country_credit_agents integer;
+begin
+    /*
+     * Authentication.
+     */
+    if auth.uid() is null then
+        raise exception using
+            errcode = '42501',
+            message = 'UNAUTHORIZED';
+    end if;
+
+    /*
+     * Only the global system administrator may access
+     * this dashboard.
+     */
+    if not public.has_role(
+        array[
+            'admin'
+        ]::text[]
+    ) then
+        raise exception using
+            errcode = '42501',
+            message = 'FORBIDDEN';
+    end if;
+
+    /*
+     * Fetch every configured application role.
+     */
+    select coalesce(
+        jsonb_agg(
+            role_name
+            order by role_name
+        ),
+        '[]'::jsonb
+    )
+    into v_roles
+    from (
+        select lower(
+            role_record.name::text
+        ) as role_name
+        from public.user_role role_record
+    ) configured_roles;
+
+    /*
+     * Fetch all operational countries and their configured
+     * currencies.
+     *
+     * This intentionally includes inactive countries and
+     * currencies so the global administrator can see the
+     * complete configuration.
+     */
+    select coalesce(
+        jsonb_agg(
+            jsonb_build_object(
+                'country_code',
+                country_record.country_code,
+
+                'name',
+                country_record.name,
+
+                'is_active',
+                country_record.is_active,
+
+                'currencies',
+                coalesce(
+                    (
+                        select jsonb_agg(
+                            jsonb_build_object(
+                                'currency_code',
+                                supported_record.currency_code,
+
+                                'name',
+                                supported_record.name,
+
+                                'symbol',
+                                supported_record.symbol,
+
+                                'decimals',
+                                supported_record.decimals,
+
+                                'category',
+                                supported_record.category,
+
+                                'rate_api',
+                                supported_record.rate_api,
+
+                                'is_active',
+                                supported_record.is_active,
+
+                                'is_reporting',
+                                supported_record.is_reporting
+                            )
+                            order by
+                                supported_record.currency_code
+                        )
+                        from public.country_currencies
+                            country_currency_record
+
+                        join public.supported_currency
+                            supported_record
+                          on lower(
+                              btrim(
+                                  supported_record.currency_code
+                              )
+                          ) =
+                             lower(
+                                 btrim(
+                                     country_currency_record.currency_code
+                                 )
+                             )
+
+                        where lower(
+                            btrim(
+                                country_currency_record.country_code
+                            )
+                        ) =
+                            lower(
+                                btrim(
+                                    country_record.country_code
+                                )
+                            )
+                    ),
+                    '[]'::jsonb
+                )
+            )
+            order by
+                country_record.name,
+                country_record.country_code
+        ),
+        '[]'::jsonb
+    )
+    into v_operational_countries
+    from public.operational_country
+        country_record;
+
+    /*
+     * Total registered users globally.
+     */
+    select count(*)::integer
+    into v_total_users
+    from public.users;
+
+    /*
+     * Count active credit agents globally.
+     *
+     * Credit-agent accounts are created per currency,
+     * therefore merchants must be counted distinctly.
+     */
+    select count(
+        distinct account_record.merchant_id
+    )::integer
+    into v_total_credit_agents
+    from public.credit_agent_account
+        account_record
+
+    join public.users merchant_record
+      on merchant_record.id =
+         account_record.merchant_id
+
+    where account_record.is_active =
+          true
+
+      and merchant_record.status =
+          'active'::public."UserStatus";
+
+    /*
+     * Global count for every configured role.
+     *
+     * Roles without users are returned with zero.
+     */
+    select coalesce(
+        jsonb_object_agg(
+            role_count.role_name,
+            role_count.user_count
+            order by role_count.role_name
+        ),
+        '{}'::jsonb
+    )
+    into v_global_role_counts
+    from (
+        select
+            lower(
+                role_record.name::text
+            ) as role_name,
+
+            count(
+                user_record.id
+            )::integer as user_count
+
+        from public.user_role role_record
+
+        left join public.users user_record
+          on user_record.role_id =
+             role_record.id
+
+        group by
+            lower(
+                role_record.name::text
+            )
+    ) role_count;
+
+    /*
+     * Build user counts for every country containing at
+     * least one registered user.
+     */
+    for v_country in
+        select distinct
+            lower(
+                btrim(
+                    user_record.country_code
+                )
+            ) as country_code
+
+        from public.users user_record
+
+        where nullif(
+            btrim(
+                user_record.country_code
+            ),
+            ''
+        ) is not null
+
+        order by
+            lower(
+                btrim(
+                    user_record.country_code
+                )
+            )
+    loop
+        /*
+         * Total users in the country.
+         */
+        select count(*)::integer
+        into v_country_total_users
+        from public.users user_record
+        where lower(
+            btrim(
+                user_record.country_code
+            )
+        ) =
+            v_country.country_code;
+
+        /*
+         * Active credit agents in the country.
+         */
+        select count(
+            distinct account_record.merchant_id
+        )::integer
+        into v_country_credit_agents
+        from public.credit_agent_account
+            account_record
+
+        join public.users merchant_record
+          on merchant_record.id =
+             account_record.merchant_id
+
+        where lower(
+            btrim(
+                account_record.country_code
+            )
+        ) =
+            v_country.country_code
+
+          and account_record.is_active =
+              true
+
+          and merchant_record.status =
+              'active'::public."UserStatus";
+
+        /*
+         * User counts per role for the country.
+         */
+        select coalesce(
+            jsonb_object_agg(
+                role_count.role_name,
+                role_count.user_count
+                order by role_count.role_name
+            ),
+            '{}'::jsonb
+        )
+        into v_country_role_counts
+        from (
+            select
+                lower(
+                    role_record.name::text
+                ) as role_name,
+
+                count(
+                    user_record.id
+                )::integer as user_count
+
+            from public.user_role role_record
+
+            left join public.users user_record
+              on user_record.role_id =
+                 role_record.id
+
+             and lower(
+                 btrim(
+                     user_record.country_code
+                 )
+             ) =
+                 v_country.country_code
+
+            group by
+                lower(
+                    role_record.name::text
+                )
+        ) role_count;
+
+        v_countries :=
+            v_countries ||
+            jsonb_build_array(
+                jsonb_build_object(
+                    'countryCode',
+                    v_country.country_code,
+
+                    'totalUsers',
+                    v_country_total_users,
+
+                    'creditAgents',
+                    v_country_credit_agents,
+
+                    'roleCounts',
+                    v_country_role_counts
+                )
+            );
+    end loop;
+
+    return jsonb_build_object(
+        /*
+         * Existing dashboard totals.
+         */
+        'summary',
+        jsonb_build_object(
+            'totalUsers',
+            v_total_users,
+
+            'creditAgents',
+            v_total_credit_agents,
+
+            'roleCounts',
+            v_global_role_counts
+        ),
+
+        /*
+         * Existing per-country user statistics.
+         */
+        'countries',
+        v_countries,
+
+        /*
+         * New administration reference data.
+         */
+        'roles',
+        v_roles,
+
+        'operationalCountries',
+        v_operational_countries
+    );
+end;
+$function$;
+
+REVOKE ALL ON FUNCTION
+    public.build_my_admin_dashboard()
+FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION
+    public.build_my_admin_dashboard()
+FROM anon;
+
+GRANT EXECUTE ON FUNCTION
+    public.build_my_admin_dashboard()
+TO authenticated;

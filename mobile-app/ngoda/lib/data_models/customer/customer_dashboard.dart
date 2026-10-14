@@ -1,5 +1,5 @@
+import 'package:ngoda/data_models/blockchain/blockchain_wallet_balance.dart';
 import 'package:ngoda/data_models/gamification/loyalty/loyalty.dart';
-
 import 'package:ngoda/data_models/currency/currency.dart';
 import 'package:ngoda/data_models/currency/currency_registry.dart';
 import 'package:ngoda/data_models/customer/loan_summary.dart';
@@ -12,7 +12,9 @@ class CustomerDashboard {
     required this.loanSummary,
     required List<Currency> currencies,
     required this.currencyRegistry,
-  }) : currencies = List.unmodifiable(currencies);
+    required List<BlockchainWalletBalance> blockchainBalances,
+  }) : currencies = List.unmodifiable(currencies),
+       blockchainBalances = List.unmodifiable(blockchainBalances);
 
   final Loyalty loyalty;
   final Wallet wallet;
@@ -21,6 +23,8 @@ class CustomerDashboard {
   final List<Currency> currencies;
   final CurrencyRegistry currencyRegistry;
 
+  final List<BlockchainWalletBalance> blockchainBalances;
+
   factory CustomerDashboard.fromJson({
     required Map<String, dynamic> loyaltyJson,
     required Map<String, dynamic> walletJson,
@@ -28,12 +32,22 @@ class CustomerDashboard {
     required List<Currency> currencies,
     required CurrencyRegistry currencyRegistry,
   }) {
+    final rawBlockchainBalances = walletJson['blockchains'];
+
+    final blockchainBalances = rawBlockchainBalances is List
+        ? rawBlockchainBalances
+              .whereType<Map<String, dynamic>>()
+              .map(BlockchainWalletBalance.fromJson)
+              .toList()
+        : <BlockchainWalletBalance>[];
+
     return CustomerDashboard(
       loyalty: Loyalty.fromJson(loyaltyJson),
       wallet: Wallet.fromJson(walletJson),
       loanSummary: LoanSummary.fromJson(loanSummary),
       currencies: currencies,
       currencyRegistry: currencyRegistry,
+      blockchainBalances: blockchainBalances,
     );
   }
 
@@ -43,5 +57,21 @@ class CustomerDashboard {
 
   bool supportsCurrency(String currencyCode) {
     return currencyRegistry.contains(currencyCode);
+  }
+
+  List<BlockchainWalletBalance> balancesForBlockchain(String blockchainCode) {
+    final code = blockchainCode.trim().toLowerCase();
+
+    return blockchainBalances
+        .where((balance) => balance.blockchainCode == code)
+        .toList(growable: false);
+  }
+
+  List<BlockchainWalletBalance> balancesForCurrency(String currencyCode) {
+    final code = currencyCode.trim().toLowerCase();
+
+    return blockchainBalances
+        .where((balance) => balance.currencyCode == code)
+        .toList(growable: false);
   }
 }

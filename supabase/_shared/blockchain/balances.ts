@@ -1,6 +1,7 @@
 import {
   formatEther,
   formatUnits,
+  ethers
 } from "ethers";
 
 import {
@@ -10,9 +11,17 @@ import {
 import {
   provider,
   providerContract,
+    createBlockchainReadClient,
+  relayerAddress, 
 } from "./client.ts";
 
-import { ethers } from "ethers";
+import {
+  SupportedBlockchainConfig,
+} from "../types/supported_blockchain_config.ts";
+import {
+  SupportedBlockchainBalance,
+} from "../types/supported_blockchain_balance.ts";
+
 
 const ZERO_ADDRESS =
   "0x0000000000000000000000000000000000000000";
@@ -20,6 +29,14 @@ const ZERO_ADDRESS =
 export type BlockchainWalletBalances = {
   token_balance: string;
   gas_balance: string;
+};
+
+export type BlockchainConfig = {
+  code: string;
+  chain_id: number;
+  rpc_url: string;
+  contract_address: string;
+  native_currency_code: string;
 };
 
 export async function getBlockchainWalletBalances(
@@ -121,4 +138,66 @@ function getRelayerAddress(): string {
   }
 
   return ethers.getAddress(address);
+}
+
+export async function getSupportedBlockchainBalance(
+  blockchain: SupportedBlockchainConfig,
+  walletAddress: string,
+): Promise<SupportedBlockchainBalance> {
+  if (!ethers.isAddress(walletAddress)) {
+    throw new AppError(
+      "INVALID_BLOCKCHAIN_WALLET_ADDRESS",
+    );
+  }
+
+  const {
+    provider,
+    contract,
+  } = createBlockchainReadClient(blockchain);
+
+  const [
+    totalSupply,
+    tokenBalance,
+    decimalsRaw,
+    gasBalance,
+  ] = await Promise.all([
+    contract.totalSupply(),
+    contract.balanceOf(walletAddress),
+    contract.decimals(),
+    provider.getBalance(walletAddress),
+  ]);
+
+  const decimals = Number(decimalsRaw);
+
+  if (
+    !Number.isSafeInteger(decimals) ||
+    decimals < 0 ||
+    decimals > 255
+  ) {
+    throw new AppError(
+      "INVALID_TOKEN_DECIMALS",
+    );
+  }
+
+  return {
+    blockchain_code: blockchain.code,
+    chain_id: blockchain.chain_id,
+
+    token_supply: formatUnits(
+      totalSupply,
+      decimals,
+    ),
+
+    balance: formatUnits(
+      tokenBalance,
+      decimals,
+    ),
+
+    gas_balance: formatEther(
+      gasBalance,
+    ),
+
+    native_currency_code:
+      blockchain.native_currency_code,
+  };
 }

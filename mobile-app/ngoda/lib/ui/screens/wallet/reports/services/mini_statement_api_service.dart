@@ -24,7 +24,8 @@ class MiniStatementApiService {
       body: {
         'start_date': params.startDate,
         'end_date': params.endDate,
-        'currency_code': params.currency,
+        if (params.currency != null && params.currency!.isNotEmpty)
+          'currency': params.currency,
         'page': params.page,
         'page_size': params.pageSize,
       },
@@ -55,11 +56,16 @@ class MiniStatementApiService {
   Future<WalletBalancePeriod> getWalletBalanceSnapshot(
     WalletSnapshotParams params,
   ) async {
+    // Validates that GOLD has a blockchainCode.
+    params.toQueryParameters();
+
     final data = await _functions.invokeData(
       functionName: 'wallet-balance-snapshot',
       body: {
-        'currency_code': params.currency.trim().toLowerCase(),
-        'wallet_owner': params.walletOwner.trim(),
+        'currency_code': params.currency,
+        'wallet_owner': params.walletOwner,
+        if (params.blockchainCode != null)
+          'blockchain_code': params.blockchainCode,
       },
       invalidResponseMessage: 'Invalid wallet balance snapshot response',
     );
@@ -79,6 +85,8 @@ class MiniStatementApiService {
         'period': params.period,
         'page': params.page,
         'pageSize': params.pageSize,
+        if (params.blockchainCode != null)
+          'blockchainCode': params.blockchainCode,
       },
       invalidResponseMessage: 'Invalid periodic wallet entries response',
     );

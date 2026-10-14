@@ -164,7 +164,7 @@ List<AppIconButton> getUserHomeScreenQuickLinks({
           },
         ),
         _quickLink(
-          label: 'Cash Deposit',
+          label: 'Cash In',
           icon: Icons.add_card_outlined,
           iconSize: iconSize,
           color: primary,
@@ -173,7 +173,7 @@ List<AppIconButton> getUserHomeScreenQuickLinks({
           },
         ),
         _quickLink(
-          label: 'Cash Withdraw',
+          label: 'Cash Out',
           icon: Icons.payments_outlined,
           iconSize: iconSize,
           color: primary,

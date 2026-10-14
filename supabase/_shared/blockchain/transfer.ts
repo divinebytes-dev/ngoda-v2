@@ -1,26 +1,19 @@
+
 import {
   getAddress,
   isAddress,
 } from "ethers";
 
-import {
-  AppError,
-} from "../app-error.ts";
-
-import {
-  blockchainConfig,
-  relayerContract,
-} from "./client.ts";
+import { AppError } from "../app-error.ts";
 
 import type {
+  BlockchainClient,
   SignedTokenTransfer,
 } from "./permit.ts";
-
 
 export type RelayedTokenTransfer = {
   txHash: string;
 };
-
 
 export type TrackedTokenTransferLifecycle = {
   onSubmitted?: (
@@ -28,130 +21,82 @@ export type TrackedTokenTransferLifecycle = {
   ) => Promise<void>;
 };
 
-
 type ValidatedTokenTransfer = {
   owner: string;
   receiver: string;
 };
 
-
 const TRANSACTION_CONFIRMATIONS = 1;
 const TRANSACTION_WAIT_TIMEOUT_MS = 45_000;
-
 
 function validateTransactionHash(
   value: unknown,
   errorMessage: string,
 ): string {
-  if (
-    typeof value !== "string"
-  ) {
-    throw new AppError(
-      errorMessage,
-    );
+  if (typeof value !== "string") {
+    throw new AppError(errorMessage);
   }
 
-  const txHash =
-    value.trim();
+  const txHash = value.trim();
 
-  if (
-    !/^0x[0-9a-fA-F]{64}$/.test(
-      txHash,
-    )
-  ) {
-    throw new AppError(
-      errorMessage,
-    );
+  if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+    throw new AppError(errorMessage);
   }
 
   return txHash;
 }
-
 
 function validateSignedTransfer(
   signed: SignedTokenTransfer,
 ): ValidatedTokenTransfer {
   if (
     !signed.owner ||
-    !isAddress(
-      signed.owner,
-    )
+    !isAddress(signed.owner)
   ) {
-    throw new AppError(
-      "INVALID_OWNER_ADDRESS",
-    );
+    throw new AppError("INVALID_OWNER_ADDRESS");
   }
 
   if (
     !signed.to ||
-    !isAddress(
-      signed.to,
-    )
+    !isAddress(signed.to)
   ) {
-    throw new AppError(
-      "INVALID_RECEIVER_ADDRESS",
-    );
+    throw new AppError("INVALID_RECEIVER_ADDRESS");
   }
 
-  if (
-    signed.parsedAmount <= 0n
-  ) {
-    throw new AppError(
-      "INVALID_TRANSFER_AMOUNT",
-    );
+  if (signed.parsedAmount <= 0n) {
+    throw new AppError("INVALID_TRANSFER_AMOUNT");
   }
 
-  if (
-    signed.parsedFee < 0n
-  ) {
-    throw new AppError(
-      "INVALID_TRANSFER_FEE",
-    );
+  if (signed.parsedFee < 0n) {
+    throw new AppError("INVALID_TRANSFER_FEE");
   }
 
-  const now =
-    BigInt(
-      Math.floor(
-        Date.now() / 1000,
-      ),
-    );
+  const now = BigInt(
+    Math.floor(Date.now() / 1000),
+  );
 
-  if (
-    signed.deadline < now
-  ) {
-    throw new AppError(
-      "SIGNATURE_EXPIRED",
-    );
+  if (signed.deadline < now) {
+    throw new AppError("SIGNATURE_EXPIRED");
   }
 
   return {
-    owner:
-      getAddress(
-        signed.owner,
-      ),
-
-    receiver:
-      getAddress(
-        signed.to,
-      ),
+    owner: getAddress(signed.owner),
+    receiver: getAddress(signed.to),
   };
 }
-
 
 async function simulateTransfer(
   signed: SignedTokenTransfer,
   transfer: ValidatedTokenTransfer,
+  client: BlockchainClient,
 ): Promise<void> {
   try {
-    await relayerContract
+    await client.relayerContract
       .transferWithPermitAndFee
       .staticCall(
         transfer.owner,
         transfer.receiver,
-
-        blockchainConfig
-          .treasuryAddress,
-
+        client.treasuryAddress,
         signed.parsedAmount,
         signed.parsedFee,
         signed.deadline,
@@ -163,20 +108,18 @@ async function simulateTransfer(
     console.error(
       "TOKEN_TRANSFER_SIMULATION_FAILED",
       {
+        blockchainCode:
+          client.blockchainCode,
+        chainId:
+          client.chainId,
         owner:
           transfer.owner,
-
         receiver:
           transfer.receiver,
-
         amount:
-          signed.parsedAmount
-            .toString(),
-
+          signed.parsedAmount.toString(),
         fee:
-          signed.parsedFee
-            .toString(),
-
+          signed.parsedFee.toString(),
         error:
           error instanceof Error
             ? error.message
@@ -190,38 +133,32 @@ async function simulateTransfer(
   }
 }
 
-
 /*
- * Existing transfer path used by Gold buy, Gold sell and
- * Gold transfer.
+ * Standard transfer path.
  *
- * Its external behavior remains unchanged: it simulates,
- * submits, waits for a receipt, and returns the receipt
- * hash. Liquidation-specific persistence is not introduced
- * into these processes.
+ * Simulates, submits, waits for confirmation
+ * and returns the confirmed transaction hash.
  */
 export async function relayTransferWithPermit(
   signed: SignedTokenTransfer,
+  client: BlockchainClient,
 ): Promise<RelayedTokenTransfer> {
-  const transfer =
-    validateSignedTransfer(
-      signed,
-    );
+  const transfer = validateSignedTransfer(
+    signed,
+  );
 
   await simulateTransfer(
     signed,
     transfer,
+    client,
   );
 
   const transaction =
-    await relayerContract
+    await client.relayerContract
       .transferWithPermitAndFee(
         transfer.owner,
         transfer.receiver,
-
-        blockchainConfig
-          .treasuryAddress,
-
+        client.treasuryAddress,
         signed.parsedAmount,
         signed.parsedFee,
         signed.deadline,
@@ -230,8 +167,7 @@ export async function relayTransferWithPermit(
         signed.s,
       );
 
-  const receipt =
-    await transaction.wait();
+  const receipt = await transaction.wait();
 
   if (!receipt?.hash) {
     throw new AppError(
@@ -239,46 +175,50 @@ export async function relayTransferWithPermit(
     );
   }
 
+  if (receipt.status !== 1) {
+    throw new AppError(
+      "TOKEN_TRANSFER_REVERTED",
+    );
+  }
+
   return {
-    txHash:
+    txHash: validateTransactionHash(
       receipt.hash,
+      "BLOCKCHAIN_RECEIPT_HASH_NOT_FOUND",
+    ),
   };
 }
 
-
 /*
- * Liquidation-only transfer path.
+ * Tracked transfer path.
  *
- * It exposes the submitted transaction hash before waiting
- * for confirmation. The liquidation processor stores that
- * hash immediately, so a later cron execution resumes the
- * same blockchain transaction instead of transferring the
- * Gold again.
+ * Records the submitted hash before waiting
+ * for blockchain confirmation.
+ *
+ * The caller must persist the hash and retain
+ * it for recovery if confirmation times out.
  */
 export async function relayTrackedTransferWithPermit(
   signed: SignedTokenTransfer,
-  lifecycle:
-    TrackedTokenTransferLifecycle = {},
+  client: BlockchainClient,
+  lifecycle: TrackedTokenTransferLifecycle = {},
 ): Promise<RelayedTokenTransfer> {
-  const transfer =
-    validateSignedTransfer(
-      signed,
-    );
+  const transfer = validateSignedTransfer(
+    signed,
+  );
 
   await simulateTransfer(
     signed,
     transfer,
+    client,
   );
 
   const transaction =
-    await relayerContract
+    await client.relayerContract
       .transferWithPermitAndFee(
         transfer.owner,
         transfer.receiver,
-
-        blockchainConfig
-          .treasuryAddress,
-
+        client.treasuryAddress,
         signed.parsedAmount,
         signed.parsedFee,
         signed.deadline,
@@ -287,26 +227,18 @@ export async function relayTrackedTransferWithPermit(
         signed.s,
       );
 
-  const submittedHash =
-    validateTransactionHash(
-      transaction.hash,
-      "BLOCKCHAIN_SUBMISSION_HASH_NOT_FOUND",
-    );
+  const submittedHash = validateTransactionHash(
+    transaction.hash,
+    "BLOCKCHAIN_SUBMISSION_HASH_NOT_FOUND",
+  );
 
-  /*
-   * This callback must finish before waiting for the
-   * receipt. If it fails, the caller still receives the
-   * submitted hash through its callback scope and records
-   * the job as resumable without submitting again.
-   */
   if (lifecycle.onSubmitted) {
     await lifecycle.onSubmitted(
       submittedHash,
     );
   }
 
-  const receipt =
-    await transaction.wait();
+  const receipt = await transaction.wait();
 
   if (!receipt) {
     throw new AppError(
@@ -320,11 +252,10 @@ export async function relayTrackedTransferWithPermit(
     );
   }
 
-  const confirmedHash =
-    validateTransactionHash(
-      receipt.hash,
-      "BLOCKCHAIN_RECEIPT_HASH_NOT_FOUND",
-    );
+  const confirmedHash = validateTransactionHash(
+    receipt.hash,
+    "BLOCKCHAIN_RECEIPT_HASH_NOT_FOUND",
+  );
 
   if (
     confirmedHash.toLowerCase() !==
@@ -336,30 +267,27 @@ export async function relayTrackedTransferWithPermit(
   }
 
   return {
-    txHash:
-      confirmedHash,
+    txHash: confirmedHash,
   };
 }
 
-
 /*
- * Resume a liquidation transfer that was submitted by an
- * earlier cron execution. This function never submits a
- * new blockchain transaction.
+ * Resume an already-submitted transfer.
+ *
+ * This function NEVER submits a new
+ * blockchain transaction.
  */
 export async function waitForRelayedTokenTransfer(
   txHash: string,
+  client: BlockchainClient,
 ): Promise<RelayedTokenTransfer> {
-  const normalizedHash =
-    validateTransactionHash(
-      txHash,
-      "INVALID_BLOCKCHAIN_TRANSACTION_HASH",
-    );
+  const normalizedHash = validateTransactionHash(
+    txHash,
+    "INVALID_BLOCKCHAIN_TRANSACTION_HASH",
+  );
 
   const provider =
-    relayerContract
-      .runner
-      ?.provider;
+    client.relayerContract.runner?.provider;
 
   if (!provider) {
     throw new AppError(
@@ -386,11 +314,10 @@ export async function waitForRelayedTokenTransfer(
     );
   }
 
-  const confirmedHash =
-    validateTransactionHash(
-      receipt.hash,
-      "BLOCKCHAIN_RECEIPT_HASH_NOT_FOUND",
-    );
+  const confirmedHash = validateTransactionHash(
+    receipt.hash,
+    "BLOCKCHAIN_RECEIPT_HASH_NOT_FOUND",
+  );
 
   if (
     confirmedHash.toLowerCase() !==
@@ -402,7 +329,6 @@ export async function waitForRelayedTokenTransfer(
   }
 
   return {
-    txHash:
-      confirmedHash,
+    txHash: confirmedHash,
   };
 }

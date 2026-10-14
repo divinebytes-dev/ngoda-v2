@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ngoda/ui/extensions/app_size.dart';
-import 'package:ngoda/ui/extensions/theme_extension.dart';
 import 'package:ngoda/ui/screens/wallet/transactions/provider/customer_transaction_setup_provider.dart';
 import 'package:ngoda/ui/widgets/action_tile.dart';
 import 'package:ngoda/ui/widgets/app_error_state.dart';
@@ -77,58 +76,44 @@ class _LoanActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final spacing = context.spacing;
-    final theme = Theme.of(context);
 
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(spacing.md),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(context.radius.cardRadius),
-        border: Border.all(
-          color: context.colorScheme.outlineVariant.withValues(alpha: 0.09),
-        ),
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          children: [
-            ActionTile(
-              title: 'Access Value',
-              subtitle: 'Unlock liquidity without selling gold',
-              icon: Icons.money,
-              color: canAccessValue ? Colors.green : Colors.grey,
-              onTap: canAccessValue
-                  ? () => context.push('/loans/borrow')
-                  : null,
-            ),
-            SizedBox(height: spacing.sm),
-            ActionTile(
-              title: 'Settle Balance',
-              subtitle: 'Outstanding Access Balance Settlement',
-              icon: Icons.monetization_on,
-              color: Colors.orange,
-              onTap: () => context.push('/loans/repay'),
-            ),
-            SizedBox(height: spacing.sm),
-            ActionTile(
-              title: 'Active Access Values',
-              subtitle: 'Active Secured Value Access List',
-              icon: Icons.list_alt,
-              color: Colors.red.shade900,
-              onTap: () => context.push('/loans/active-loans'),
-            ),
-            SizedBox(height: spacing.sm),
-            ActionTile(
-              title: 'Topup Loan Collateral',
-              subtitle: 'Add collateral to risk loans',
-              icon: Icons.account_balance_wallet_outlined,
-              color: canTopupCollateral ? Colors.purple.shade900 : Colors.grey,
-              onTap: canTopupCollateral
-                  ? () => context.push('/loans/topup-collateral')
-                  : null,
-            ),
-          ],
-        ),
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          ActionTile(
+            title: 'Access Value',
+            subtitle: 'Unlock liquidity without selling gold',
+            icon: Icons.money,
+            color: canAccessValue ? Colors.green : Colors.grey,
+            onTap: canAccessValue ? () => context.push('/loans/borrow') : null,
+          ),
+          SizedBox(height: spacing.sm),
+          ActionTile(
+            title: 'Settle Balance',
+            subtitle: 'Outstanding Access Balance Settlement',
+            icon: Icons.monetization_on,
+            color: Colors.orange,
+            onTap: () => context.push('/loans/repay'),
+          ),
+          SizedBox(height: spacing.sm),
+          ActionTile(
+            title: 'Active Access Values',
+            subtitle: 'Active Secured Value Access List',
+            icon: Icons.list_alt,
+            color: Colors.red.shade900,
+            onTap: () => context.push('/loans/active-loans'),
+          ),
+          SizedBox(height: spacing.sm),
+          ActionTile(
+            title: 'Topup Loan Collateral',
+            subtitle: 'Add collateral to risk loans',
+            icon: Icons.account_balance_wallet_outlined,
+            color: canTopupCollateral ? Colors.purple.shade900 : Colors.grey,
+            onTap: canTopupCollateral
+                ? () => context.push('/loans/topup-collateral')
+                : null,
+          ),
+        ],
       ),
     );
   }

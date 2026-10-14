@@ -148,7 +148,9 @@ class _DrillHeader extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(radius.borderRadius),
-        border: Border.all(color: colorScheme.outlineVariant),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,7 +258,9 @@ class _PeriodCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: colorScheme.surface,
           borderRadius: BorderRadius.circular(radius.borderRadius),
-          border: Border.all(color: colorScheme.outlineVariant),
+          border: Border.all(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -18,6 +18,7 @@ import 'package:ngoda/ui/widgets/app_button.dart';
 import 'package:ngoda/ui/widgets/app_empty_state.dart';
 import 'package:ngoda/ui/widgets/app_error_state.dart';
 import 'package:ngoda/ui/widgets/app_loader.dart';
+import 'package:ngoda/ui/widgets/app_search_dropdown_field.dart';
 import 'package:ngoda/ui/widgets/app_value_row.dart';
 import 'package:ngoda/ui/widgets/input_field.dart';
 import 'package:ngoda/ui/widgets/payment_calculation_card.dart';
@@ -36,9 +37,7 @@ class _SellGoldScreenState extends ConsumerState<SellGoldScreen> {
     super.initState();
 
     Future.microtask(() {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       ref.read(goldTransactionProvider.notifier).initSell();
     });
@@ -116,10 +115,10 @@ class _SellGoldScreenState extends ConsumerState<SellGoldScreen> {
 }
 
 class SellGold extends ConsumerStatefulWidget {
+  const SellGold({super.key, required this.price, required this.onRefresh});
+
   final double price;
   final Future<void> Function() onRefresh;
-
-  const SellGold({super.key, required this.price, required this.onRefresh});
 
   @override
   ConsumerState<SellGold> createState() => _SellGoldState();
@@ -128,8 +127,9 @@ class SellGold extends ConsumerStatefulWidget {
 class _SellGoldState extends ConsumerState<SellGold>
     with TickerProviderStateMixin {
   late final TabController _tabController;
-
   late final TextEditingController _amountController;
+
+  String? _blockchainCode;
 
   @override
   void initState() {
@@ -140,9 +140,7 @@ class _SellGoldState extends ConsumerState<SellGold>
     _tabController = TabController(length: 2, vsync: this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       _applyPrice(widget.price);
     });
@@ -154,9 +152,7 @@ class _SellGoldState extends ConsumerState<SellGold>
 
     if (oldWidget.price != widget.price) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
 
         _applyPrice(widget.price);
       });
@@ -186,7 +182,15 @@ class _SellGoldState extends ConsumerState<SellGold>
     final value = _amountController.text.trim();
 
     if (value.isNotEmpty) {
-      _updateAmount(value);
+      final setup = ref.read(customerTransactionSetupProvider).value;
+
+      final code = _blockchainCode;
+
+      if (setup != null && code != null) {
+        final balance = setup.goldBalanceFor(code) ?? 0.0;
+
+        _updateAmount(value, balance);
+      }
     }
   }
 
@@ -195,64 +199,79 @@ class _SellGoldState extends ConsumerState<SellGold>
     final setupAsync = ref.watch(customerTransactionSetupProvider);
 
     final state = ref.watch(goldTransactionProvider);
-
     final notifier = ref.read(goldTransactionProvider.notifier);
+
+    final spacing = context.spacing;
+    final radius = context.radius;
     final colorScheme = context.colorScheme;
 
     return setupAsync.when(
       loading: () =>
-          const AppLoader(message: 'Loading gold balance', fullScreen: false),
+          const AppLoader(message: 'Loading gold balances', fullScreen: false),
       error: (error, _) => _RefreshableState(
         onRefresh: widget.onRefresh,
         child: AppErrorState(
-          title: 'Unable to load gold balance',
+          title: 'Unable to load gold balances',
           message: error.toString(),
           onAction: () => context.pop(),
         ),
       ),
       data: (setup) {
-        /*
-         * customerTransactionSetupProvider
-         * has already converted the dashboard
-         * into the transaction snapshot.
-         */
-        final balance = setup.balances['gold'];
+        final codes = setup.blockchains;
 
-        if (balance == null) {
+        if (codes.isEmpty) {
           return _RefreshableState(
             onRefresh: widget.onRefresh,
-            child: const AppEmptyState(message: 'Gold balance is unavailable'),
+            child: const AppEmptyState(
+              message: 'No GOLD blockchain balances available',
+            ),
           );
         }
 
-        final spread = state.spreadRate / 100;
+        final selected = codes.contains(_blockchainCode)
+            ? _blockchainCode
+            : null;
 
+        final balance = selected == null
+            ? 0.0
+            : setup.goldBalanceFor(selected) ?? 0.0;
+
+        String blockchainLabel(String code) {
+          final available = setup.goldBalanceFor(code) ?? 0.0;
+
+          return '$code — '
+              '${NumberFormatService.formatNumber(available, decimals: 6)} g';
+        }
+
+        final spread = state.spreadRate / 100;
         final effectivePrice = state.goldPrice * (1 - spread);
+
+        final canSell = selected != null && state.isValid && !state.isLoading;
 
         return Column(
           children: [
             Container(
-              margin: EdgeInsets.symmetric(horizontal: context.spacing.md),
-              padding: EdgeInsets.all(context.spacing.xs),
+              margin: EdgeInsets.symmetric(horizontal: spacing.md),
+              padding: EdgeInsets.all(spacing.xs),
               decoration: BoxDecoration(
                 color: context.theme.cardColor.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(context.radius.sm),
+                borderRadius: BorderRadius.circular(radius.sm),
               ),
               child: TabBar(
                 controller: _tabController,
                 dividerColor: Colors.transparent,
                 indicator: BoxDecoration(
                   color: AppColors.darkPrimary,
-                  borderRadius: BorderRadius.circular(context.radius.sm),
+                  borderRadius: BorderRadius.circular(radius.sm),
                 ),
                 indicatorSize: TabBarIndicatorSize.tab,
                 labelColor: Colors.black,
-                unselectedLabelColor: context.colorScheme.onSurfaceVariant,
+                unselectedLabelColor: colorScheme.onSurfaceVariant,
                 labelStyle: AppTextStyles.small(
                   context,
                 ).copyWith(fontWeight: FontWeight.w700),
                 onTap: (index) {
-                  _changeInputMode(index, effectivePrice);
+                  _changeInputMode(index, effectivePrice, balance);
                 },
                 tabs: const [
                   Tab(text: 'Receive USD'),
@@ -261,7 +280,7 @@ class _SellGoldState extends ConsumerState<SellGold>
               ),
             ),
 
-            SizedBox(height: context.spacing.xs),
+            SizedBox(height: spacing.xs),
 
             Expanded(
               child: RefreshIndicator(
@@ -271,17 +290,15 @@ class _SellGoldState extends ConsumerState<SellGold>
                   physics: const AlwaysScrollableScrollPhysics(),
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: EdgeInsets.all(context.spacing.md),
+                  padding: EdgeInsets.all(spacing.md),
                   children: [
-                    SizedBox(height: context.spacing.xl),
+                    SizedBox(height: spacing.xl),
 
                     Container(
-                      padding: EdgeInsets.all(context.spacing.padding),
+                      padding: EdgeInsets.all(spacing.padding),
                       decoration: BoxDecoration(
                         color: context.theme.cardColor,
-                        borderRadius: BorderRadius.circular(
-                          context.radius.cardRadius,
-                        ),
+                        borderRadius: BorderRadius.circular(radius.cardRadius),
                         border: Border.all(
                           color: colorScheme.outlineVariant.withValues(
                             alpha: 0.09,
@@ -289,7 +306,61 @@ class _SellGoldState extends ConsumerState<SellGold>
                         ),
                       ),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Text(
+                            'Sell Details',
+                            style: AppTextStyles.medium(
+                              context,
+                            ).copyWith(fontWeight: FontWeight.w600),
+                          ),
+
+                          SizedBox(height: spacing.lg),
+
+                          Text(
+                            'Blockchain',
+                            style: AppTextStyles.small(context),
+                          ),
+
+                          SizedBox(height: spacing.sm),
+
+                          AbsorbPointer(
+                            absorbing: state.isLoading,
+                            child: AppSearchDropdownField<String>(
+                              selected: selected,
+                              values: codes,
+                              hint: 'Select blockchain',
+                              displayText: blockchainLabel,
+                              filter: (code, query) => code
+                                  .toLowerCase()
+                                  .contains(query.toLowerCase()),
+                              onSelect: (code) {
+                                if (state.isLoading) return;
+
+                                setState(() {
+                                  _blockchainCode = code;
+                                });
+
+                                final selectedBalance =
+                                    setup.goldBalanceFor(code) ?? 0.0;
+
+                                _updateAmount(
+                                  _amountController.text,
+                                  selectedBalance,
+                                );
+                              },
+                              itemBuilder: (context, code) => Padding(
+                                padding: EdgeInsets.all(spacing.md),
+                                child: Text(
+                                  blockchainLabel(code),
+                                  style: AppTextStyles.small(context),
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          SizedBox(height: spacing.md),
+
                           InputField(
                             controller: _amountController,
                             placeholder: _tabController.index == 0
@@ -298,19 +369,21 @@ class _SellGoldState extends ConsumerState<SellGold>
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
-                            onChanged: _updateAmount,
+                            decimalPlaces: _tabController.index == 0 ? 2 : 3,
+                            onChanged: (value) {
+                              _updateAmount(value, balance);
+                            },
                           ),
 
-                          SizedBox(height: context.spacing.sm),
+                          SizedBox(height: spacing.sm),
 
                           Container(
-                            padding: EdgeInsets.all(context.spacing.sm),
+                            width: double.infinity,
+                            padding: EdgeInsets.all(spacing.padding),
                             decoration: BoxDecoration(
-                              color: context.theme.cardColor.withValues(
-                                alpha: 0.25,
-                              ),
+                              color: colorScheme.surfaceContainer,
                               borderRadius: BorderRadius.circular(
-                                context.radius.cardRadius,
+                                radius.borderRadius,
                               ),
                               border: Border.all(
                                 color: colorScheme.outlineVariant.withValues(
@@ -321,7 +394,9 @@ class _SellGoldState extends ConsumerState<SellGold>
                             child: Column(
                               children: [
                                 AppValueRow(
-                                  label: 'Available Balance',
+                                  label: selected == null
+                                      ? 'Available Gold'
+                                      : 'Available Gold ($selected)',
                                   value: NumberFormatService.formatNumber(
                                     balance,
                                     decimals: 6,
@@ -332,7 +407,7 @@ class _SellGoldState extends ConsumerState<SellGold>
                                   addBottomSpacing: false,
                                 ),
 
-                                SizedBox(height: context.spacing.sm),
+                                SizedBox(height: spacing.sm),
 
                                 AppValueRow(
                                   label: 'Gold Sell Price',
@@ -345,48 +420,47 @@ class _SellGoldState extends ConsumerState<SellGold>
                             ),
                           ),
 
-                          if (state.amount > 0) ...[
-                            SizedBox(height: context.spacing.lg),
+                          if (state.amount > 0 && selected != null) ...[
+                            SizedBox(height: spacing.lg),
                             _buildCalculation(),
                           ],
-
-                          SizedBox(height: context.spacing.lg),
-
-                          Row(
-                            children: [
-                              Expanded(
-                                child: AppButton(
-                                  text: 'Cancel',
-                                  isPrimary: false,
-                                  isDisabled: state.isLoading,
-                                  onPressed: () {
-                                    _amountController.clear();
-
-                                    notifier.reset();
-
-                                    context.pop();
-                                  },
-                                ),
-                              ),
-
-                              SizedBox(width: context.spacing.sm),
-
-                              Expanded(
-                                child: AppButton(
-                                  text: 'Sell Gold',
-                                  isProcessing: state.isLoading,
-                                  onPressed: !state.isValid || state.isLoading
-                                      ? null
-                                      : _handleSellGold,
-                                ),
-                              ),
-                            ],
-                          ),
                         ],
                       ),
                     ),
 
-                    SizedBox(height: context.spacing.xl),
+                    SizedBox(height: spacing.lg),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: AppButton(
+                            text: 'Cancel',
+                            isPrimary: false,
+                            isDisabled: state.isLoading,
+                            onPressed: state.isLoading
+                                ? null
+                                : () {
+                                    _amountController.clear();
+                                    notifier.reset();
+                                    context.pop();
+                                  },
+                          ),
+                        ),
+
+                        SizedBox(width: spacing.md),
+
+                        Expanded(
+                          child: AppButton(
+                            text: 'Sell Gold',
+                            isProcessing: state.isLoading,
+                            isDisabled: !canSell,
+                            onPressed: canSell ? _handleSellGold : null,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    SizedBox(height: spacing.xl),
                   ],
                 ),
               ),
@@ -397,7 +471,7 @@ class _SellGoldState extends ConsumerState<SellGold>
     );
   }
 
-  void _changeInputMode(int index, double effectivePrice) {
+  void _changeInputMode(int index, double effectivePrice, double balance) {
     final current =
         double.tryParse(_amountController.text.trim().replaceAll(',', '')) ?? 0;
 
@@ -407,20 +481,12 @@ class _SellGoldState extends ConsumerState<SellGold>
 
     if (current > 0 && effectivePrice > 0 && effectivePrice.isFinite) {
       if (index == 0) {
-        /*
-         * Previous mode was GOLD.
-         * Convert entered GOLD quantity
-         * to USD proceeds.
-         */
+        // GOLD -> USD
         final fiatAmount = current * effectivePrice;
 
         _amountController.text = fiatAmount.toStringAsFixed(2);
       } else {
-        /*
-         * Previous mode was USD.
-         * Convert desired USD proceeds
-         * to GOLD quantity.
-         */
+        // USD -> GOLD
         final goldQuantity = current / effectivePrice;
 
         _amountController.text = goldQuantity.toStringAsFixed(6);
@@ -433,29 +499,19 @@ class _SellGoldState extends ConsumerState<SellGold>
 
     setState(() {});
 
-    if (_amountController.text.trim().isNotEmpty) {
-      _updateAmount(_amountController.text);
-    }
+    _updateAmount(_amountController.text, balance);
   }
 
-  void _updateAmount(String value) {
-    final setup = ref.read(customerTransactionSetupProvider).value;
-
+  void _updateAmount(String value, double balance) {
     final configResponse = ref.read(transactionsConfigProvider).value;
 
-    final balance = setup?.balances['gold'];
-
-    if (setup == null || configResponse == null || balance == null) {
-      return;
-    }
+    if (configResponse == null) return;
 
     final currency = _tabController.index == 0 ? 'usd' : 'gold';
 
     final feeConfig = configResponse.result?.get('gold_token_sell', currency);
 
-    if (feeConfig == null) {
-      return;
-    }
+    if (feeConfig == null) return;
 
     ref
         .read(goldTransactionProvider.notifier)
@@ -469,7 +525,6 @@ class _SellGoldState extends ConsumerState<SellGold>
 
   Widget _buildCalculation() {
     final state = ref.watch(goldTransactionProvider);
-
     final result = state.result;
 
     if (result == null) {
@@ -488,7 +543,6 @@ class _SellGoldState extends ConsumerState<SellGold>
             ).copyWith(fontWeight: FontWeight.w700),
             addBottomSpacing: false,
           ),
-
           SizedBox(height: context.spacing.sm),
         ],
 
@@ -536,39 +590,43 @@ class _SellGoldState extends ConsumerState<SellGold>
   }
 
   Future<void> _handleSellGold() async {
-    try {
-      final confirmed = await _confirmSell();
+    final blockchainCode = _blockchainCode;
 
-      if (confirmed != true) {
-        return;
-      }
+    if (blockchainCode == null) return;
+
+    try {
+      final confirmed = await _confirmSell(blockchainCode);
+
+      if (confirmed != true || !mounted) return;
 
       final notifier = ref.read(goldTransactionProvider.notifier);
 
-      await notifier.goldSell();
+      await notifier.goldSell(blockchainCode: blockchainCode);
 
       refreshUserDashboard(ref);
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
-      await _showReceipt();
+      await _showReceipt(blockchainCode);
+
+      if (!mounted) return;
 
       _amountController.clear();
+
+      setState(() {
+        _blockchainCode = null;
+      });
+
       notifier.reset();
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       await DialogService.error(context, message: error.toString());
     }
   }
 
-  Future<bool?> _confirmSell() {
+  Future<bool?> _confirmSell(String blockchainCode) {
     final state = ref.read(goldTransactionProvider);
-
     final result = state.result;
 
     if (result == null) {
@@ -579,6 +637,7 @@ class _SellGoldState extends ConsumerState<SellGold>
       context,
       title: 'Confirm Gold Sell',
       rows: [
+        PaymentRow('Blockchain', blockchainCode),
         PaymentRow(
           'You will Receive',
           NumberFormatService.formatUsd(result.principal),
@@ -601,19 +660,17 @@ class _SellGoldState extends ConsumerState<SellGold>
     );
   }
 
-  Future<void> _showReceipt() async {
+  Future<void> _showReceipt(String blockchainCode) async {
     final state = ref.read(goldTransactionProvider);
-
     final result = state.result;
 
-    if (result == null) {
-      return;
-    }
+    if (result == null) return;
 
     await DialogService.paymentReceipt(
       context,
       title: 'Gold Sold Successfully',
       rows: [
+        PaymentRow('Blockchain', blockchainCode),
         PaymentRow(
           'Received',
           NumberFormatService.formatUsd(result.principal),
@@ -640,10 +697,10 @@ class _SellGoldState extends ConsumerState<SellGold>
 }
 
 class _RefreshableState extends StatelessWidget {
+  const _RefreshableState({required this.child, required this.onRefresh});
+
   final Widget child;
   final Future<void> Function() onRefresh;
-
-  const _RefreshableState({required this.child, required this.onRefresh});
 
   @override
   Widget build(BuildContext context) {

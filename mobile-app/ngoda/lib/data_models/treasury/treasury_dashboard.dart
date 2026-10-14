@@ -1,3 +1,4 @@
+import 'package:ngoda/data_models/blockchain/blockchain_balance.dart';
 import 'package:ngoda/data_models/currency/currency.dart';
 import 'package:ngoda/data_models/currency/currency_registry.dart';
 import 'package:ngoda/data_models/treasury/treasury_wallet.dart';
@@ -8,26 +9,35 @@ class TreasuryDashboard {
   TreasuryDashboard({
     required this.goldReserve,
     required this.tokenSupply,
-    required this.gasBalance,
+    required this.treasuryGoldBalance,
     required this.reserveRatio,
     required this.treasuryWallet,
+    required List<BlockchainBalance> blockchainBalances,
     required List<Currency> currencies,
     required this.currencyRegistry,
-  }) : currencies = List.unmodifiable(currencies);
+  }) : blockchainBalances = List.unmodifiable(blockchainBalances),
+       currencies = List.unmodifiable(currencies);
 
   final double goldReserve;
+
+  /// Consolidated token supply across supported blockchains.
   final double tokenSupply;
 
-  final double gasBalance;
+  /// Consolidated Treasury gold holdings across supported blockchains.
+  final double treasuryGoldBalance;
 
   /// Backend-calculated reserve ratio.
   final double reserveRatio;
 
+  /// Consolidated Treasury balances, grouped by currency.
+  final TreasuryWallet treasuryWallet;
+
+  /// Individual blockchain balances.
+  final List<BlockchainBalance> blockchainBalances;
+
   final List<Currency> currencies;
 
   final CurrencyRegistry currencyRegistry;
-
-  final TreasuryWallet treasuryWallet;
 
   factory TreasuryDashboard.fromJson(Map<String, dynamic> json) {
     final walletMap = <String, dynamic>{};
@@ -55,6 +65,10 @@ class TreasuryDashboard {
       }
     }
 
+    final blockchainBalances = _parseBlockchainBalances(
+      json['blockchain_balances'],
+    );
+
     final currencies = _parseCurrencies(json['currencies']);
 
     CurrencyService.initialize(currencies);
@@ -62,12 +76,29 @@ class TreasuryDashboard {
     return TreasuryDashboard(
       goldReserve: NumberConversionService.toDouble(json['gold_reserve']),
       tokenSupply: NumberConversionService.toDouble(json['token_supply']),
-      gasBalance: NumberConversionService.toDouble(json['gas_balance']),
+      treasuryGoldBalance: NumberConversionService.toDouble(
+        json['treasury_gold_balance'],
+      ),
       reserveRatio: NumberConversionService.toDouble(json['reserve_ratio']),
       treasuryWallet: TreasuryWallet.fromJson(walletMap),
+      blockchainBalances: blockchainBalances,
       currencies: currencies,
       currencyRegistry: CurrencyRegistry.fromCurrencies(currencies),
     );
+  }
+
+  static List<BlockchainBalance> _parseBlockchainBalances(dynamic value) {
+    if (value is! List) {
+      return const [];
+    }
+
+    return value
+        .whereType<Map>()
+        .map(
+          (blockchain) =>
+              BlockchainBalance.fromJson(Map<String, dynamic>.from(blockchain)),
+        )
+        .toList();
   }
 
   static List<Currency> _parseCurrencies(dynamic value) {
@@ -85,30 +116,52 @@ class TreasuryDashboard {
 }
 
 extension TreasuryDashboardX on TreasuryDashboard {
-  /// 🔥 reserve coverage %
+  /// Reserve coverage percentage.
   double get reserveCoveragePercent => reserveRatio * 100;
 
-  /// 🔥 healthy reserve
+  /// Healthy reserve.
   bool get isHealthyReserve => reserveRatio >= 1;
 
-  /// 🔥 wallet USD value
+  /// Consolidated Treasury wallet USD value.
   double get treasuryUsdValue => treasuryWallet.totalUsdValue;
+
+  /// Physical reserve less issued gold tokens.
   double get excessReserve => goldReserve - tokenSupply;
 
   bool get isFullyBacked => reserveRatio >= 1;
 
   double get reservePercentage => reserveRatio * 100;
 
-  /// 🔥 formatted reserve status
+  /// Find an individual blockchain balance.
+  BlockchainBalance? getBlockchainBalance(String blockchainCode) {
+    final code = blockchainCode.trim().toLowerCase();
+
+    for (final blockchain in blockchainBalances) {
+      if (blockchain.blockchainCode == code) {
+        return blockchain;
+      }
+    }
+
+    return null;
+  }
+
+  bool hasBlockchain(String blockchainCode) {
+    return getBlockchainBalance(blockchainCode) != null;
+  }
+
+  /// Total number of active blockchains returned by the backend.
+  int get blockchainCount => blockchainBalances.length;
+
+  /// Formatted reserve status.
   String get reserveStatus {
     if (reserveRatio >= 1) {
-      return "Healthy";
+      return 'Healthy';
     }
 
     if (reserveRatio >= 0.75) {
-      return "Warning";
+      return 'Warning';
     }
 
-    return "Critical";
+    return 'Critical';
   }
 }

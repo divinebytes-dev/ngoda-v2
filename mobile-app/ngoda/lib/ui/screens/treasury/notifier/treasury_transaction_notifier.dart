@@ -128,19 +128,21 @@ class TreasuryTransactionNotifier extends Notifier<TreasuryTransactionState> {
     );
   }
 
-  Future<void> executeTokenAdjustment({required String id}) async {
+  Future<void> executeTokenAdjustment({
+    required String id,
+    required String blockchainCode,
+  }) async {
     state = state.copyWith(isLoading: true);
 
     try {
       final service = ref.read(treasuryApiServiceProvider);
 
-      await service.executeTokenAdjustment(id: id);
-
+      await service.executeTokenAdjustment(
+        id: id,
+        blockchainCode: blockchainCode,
+      );
+    } finally {
       state = state.copyWith(isLoading: false);
-    } catch (_) {
-      state = state.copyWith(isLoading: false);
-
-      rethrow;
     }
   }
 

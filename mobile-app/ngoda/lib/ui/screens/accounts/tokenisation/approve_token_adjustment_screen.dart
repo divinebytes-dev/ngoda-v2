@@ -16,7 +16,6 @@ import 'package:ngoda/ui/widgets/app_button.dart';
 import 'package:ngoda/ui/widgets/app_empty_state.dart';
 import 'package:ngoda/ui/widgets/app_error_state.dart';
 import 'package:ngoda/ui/widgets/app_loader.dart';
-import 'package:ngoda/ui/widgets/app_value_row.dart';
 import 'package:ngoda/ui/widgets/view_header.dart';
 
 class ApproveTokenAdjustmentScreen extends ConsumerStatefulWidget {
@@ -42,7 +41,19 @@ class _ApproveTokenAdjustmentScreenState
     final asyncAdjustment = ref.watch(tokenAdjustmentProvider(_status));
 
     return Scaffold(
+      bottomNavigationBar: asyncAdjustment.when(
+        loading: () => null,
+        error: (_, _) => null,
+        data: (response) {
+          final adjustment = response.result;
+          if (response.error != null || adjustment == null) {
+            return null;
+          }
+          return _StickyActions(adjustment: adjustment, onCompleted: _refresh);
+        },
+      ),
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             ViewHeader(
@@ -136,61 +147,43 @@ class TokenAdjustmentBody extends ConsumerWidget {
 
     return RefreshIndicator(
       onRefresh: onRefresh,
-      child: Stack(
-        children: [
-          SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.fromLTRB(
-              spacing.md,
-              spacing.md,
-              spacing.md,
-              spacing.xxxxl,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.all(spacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _CoverageInsight(
+              current: current,
+              projected: projected,
+              isSafe: isSafe,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _CoverageInsight(
-                  current: current,
-                  projected: projected,
-                  isSafe: isSafe,
-                ),
-                SizedBox(height: spacing.md),
-                _DetailsCard(adjustment),
-                SizedBox(height: spacing.md),
-                _StateCard(
-                  title: 'Current State',
-                  gold: adjustment.availableGold,
-                  tokens: adjustment.totalTokens,
-                  coverage: current,
-                  isSafe: true,
-                  isCurrent: true,
-                ),
-                SizedBox(height: spacing.md),
-                _StateCard(
-                  title: 'After Approval',
-                  gold: adjustment.projectedGold,
-                  tokens: adjustment.projectedTokens,
-                  coverage: projected,
-                  isSafe: isSafe,
-                  isCurrent: false,
-                ),
-                if (!isSafe) ...[
-                  SizedBox(height: spacing.md),
-                  const _WarningCard(),
-                ],
-              ],
+            SizedBox(height: spacing.md),
+            _DetailsCard(adjustment),
+            SizedBox(height: spacing.md),
+            _StateCard(
+              title: 'Current State',
+              gold: adjustment.availableGold,
+              tokens: adjustment.totalTokens,
+              coverage: current,
+              isSafe: true,
+              isCurrent: true,
             ),
-          ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: _StickyActions(
-              adjustment: adjustment,
-              onCompleted: onRefresh,
+            SizedBox(height: spacing.md),
+            _StateCard(
+              title: 'After Approval',
+              gold: adjustment.projectedGold,
+              tokens: adjustment.projectedTokens,
+              coverage: projected,
+              isSafe: isSafe,
+              isCurrent: false,
             ),
-          ),
-        ],
+            if (!isSafe) ...[
+              SizedBox(height: spacing.md),
+              const _WarningCard(),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -228,7 +221,11 @@ class _StickyActions extends ConsumerWidget {
       padding: EdgeInsets.all(spacing.sm),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        border: Border(top: BorderSide(color: colorScheme.outlineVariant)),
+        border: Border(
+          top: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
       ),
       child: SafeArea(
         top: false,
@@ -325,7 +322,9 @@ class _CoverageInsight extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(radius.borderRadius),
-        border: Border.all(color: colorScheme.outlineVariant),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -430,7 +429,7 @@ class _StateCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(radius.borderRadius),
-        border: Border.all(color: statusColor.withValues(alpha: 0.20)),
+        border: Border.all(color: statusColor.withValues(alpha: 0.10)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -442,11 +441,11 @@ class _StateCard extends StatelessWidget {
             ).copyWith(fontWeight: FontWeight.w700),
           ),
           SizedBox(height: spacing.sm),
-          AppValueRow(
+          _AdjustmentValueRow(
             label: 'Gold Reserve',
             value: NumberFormatService.formatNumber(gold),
           ),
-          AppValueRow(
+          _AdjustmentValueRow(
             label: 'Token Supply',
             value: NumberFormatService.formatNumber(tokens),
           ),
@@ -525,12 +524,14 @@ class _DetailsCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(radius.borderRadius),
-        border: Border.all(color: colorScheme.outlineVariant),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+        ),
       ),
       child: Column(
         children: [
-          AppValueRow(label: 'Type', value: adjustment.adjustmentType),
-          AppValueRow(
+          _AdjustmentValueRow(label: 'Type', value: adjustment.adjustmentType),
+          _AdjustmentValueRow(
             label: 'Quantity',
             value:
                 '${NumberFormatService.formatNumber(adjustment.quantity)} '
@@ -538,9 +539,10 @@ class _DetailsCard extends StatelessWidget {
             addBottomSpacing: adjustment.description != null,
           ),
           if (adjustment.description != null)
-            AppValueRow(
+            _AdjustmentValueRow(
               label: 'Description',
               value: adjustment.description!,
+              stacked: true,
               addBottomSpacing: false,
             ),
         ],
@@ -566,4 +568,75 @@ Future<bool?> _confirm(
       ),
     ],
   );
+}
+
+class _AdjustmentValueRow extends StatelessWidget {
+  const _AdjustmentValueRow({
+    required this.label,
+    required this.value,
+    this.addBottomSpacing = true,
+    this.stacked = false,
+  });
+
+  final String label;
+  final String value;
+  final bool addBottomSpacing;
+  final bool stacked;
+
+  @override
+  Widget build(BuildContext context) {
+    final spacing = context.spacing;
+    final colorScheme = context.colorScheme;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: addBottomSpacing ? spacing.sm : 0),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final labelWidget = Text(
+            label,
+            softWrap: true,
+            style: AppTextStyles.small(
+              context,
+            ).copyWith(color: colorScheme.onSurfaceVariant),
+          );
+
+          if (stacked || constraints.maxWidth < 280) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                labelWidget,
+                SizedBox(height: spacing.xs),
+                Text(
+                  value,
+                  softWrap: true,
+                  style: AppTextStyles.small(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w600),
+                ),
+              ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 2, child: labelWidget),
+              SizedBox(width: spacing.sm),
+              Expanded(
+                flex: 3,
+                child: Text(
+                  value,
+                  textAlign: TextAlign.end,
+                  softWrap: true,
+                  style: AppTextStyles.small(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }

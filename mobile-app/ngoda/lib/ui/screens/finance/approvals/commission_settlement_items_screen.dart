@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ngoda/data_models/commission/settlement_item.dart';
 import 'package:ngoda/data_models/commission/settlement_items_page.dart';
-import 'package:ngoda/data_models/common/report_pagination.dart';
 import 'package:ngoda/data_models/params/settlement_items_params.dart';
 import 'package:ngoda/services/number_format_service.dart';
 import 'package:ngoda/services/screen_scaling_service.dart';
@@ -13,12 +12,11 @@ import 'package:ngoda/ui/widgets/app_empty_state.dart';
 import 'package:ngoda/ui/widgets/app_error_state.dart';
 import 'package:ngoda/ui/widgets/app_loader.dart';
 import 'package:ngoda/ui/widgets/view_header.dart';
+import 'package:ngoda/ui/widgets/app_pagination.dart';
 
 class CommissionSettlementDrilldownScreen extends ConsumerStatefulWidget {
   final SettlementItemsParams params;
-
   const CommissionSettlementDrilldownScreen({super.key, required this.params});
-
   @override
   ConsumerState<CommissionSettlementDrilldownScreen> createState() =>
       _CommissionSettlementDrilldownScreenState();
@@ -28,66 +26,73 @@ class _CommissionSettlementDrilldownScreenState
     extends ConsumerState<CommissionSettlementDrilldownScreen> {
   late int currentPage;
   late int pageSize;
-
+  late SettlementItemsParams _currentParams;
   @override
   void initState() {
     super.initState();
-
     currentPage = widget.params.page;
     pageSize = widget.params.pageSize;
+    _currentParams = widget.params;
   }
 
   SettlementItemsParams get currentParams {
-    return widget.params.copyWith(page: currentPage, pageSize: pageSize);
+    return _currentParams;
   }
 
   /* =========================================================
    * REFRESH
    * ========================================================= */
-
   Future<void> _refresh() async {
     ref.invalidate(commissionSettlementItemsProvider(currentParams));
-
     await ref.read(commissionSettlementItemsProvider(currentParams).future);
   }
 
   /* =========================================================
    * PAGINATION
    * ========================================================= */
-
   void _previousPage() {
     if (currentPage <= 1) {
       return;
     }
-
     setState(() {
       currentPage--;
+      _currentParams = widget.params.copyWith(
+        page: currentPage,
+        pageSize: pageSize,
+      );
     });
   }
 
   void _nextPage() {
     setState(() {
       currentPage++;
+      _currentParams = widget.params.copyWith(
+        page: currentPage,
+        pageSize: pageSize,
+      );
     });
   }
 
   void _changePageSize(int newPageSize) {
+    if (newPageSize < 1 || newPageSize == pageSize) return;
     setState(() {
       pageSize = newPageSize;
       currentPage = 1;
+      _currentParams = widget.params.copyWith(
+        page: currentPage,
+        pageSize: pageSize,
+      );
     });
   }
 
   /* =========================================================
    * BUILD
    * ========================================================= */
-
   @override
   Widget build(BuildContext context) {
     final drilldownAsync = ref.watch(
       commissionSettlementItemsProvider(currentParams),
     );
-
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -98,11 +103,9 @@ class _CommissionSettlementDrilldownScreenState
                 ref.invalidate(
                   commissionSettlementItemsProvider(currentParams),
                 );
-
                 context.pop();
               },
             ),
-
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _refresh,
@@ -111,13 +114,11 @@ class _CommissionSettlementDrilldownScreenState
                     message: 'Loading settlement items',
                     fullScreen: false,
                   ),
-
                   error: (error, stackTrace) {
                     return _RefreshableState(
                       child: AppErrorState(message: error.toString()),
                     );
                   },
-
                   data: (response) {
                     if (response.error != null) {
                       return _RefreshableState(
@@ -126,17 +127,13 @@ class _CommissionSettlementDrilldownScreenState
                         ),
                       );
                     }
-
                     final drilldown = response.result;
-
                     if (drilldown == null) {
                       return const _RefreshableState(child: AppEmptyState());
                     }
-
                     return _DrilldownContent(
                       drilldown: drilldown,
                       currency: widget.params.currency,
-                      pageSize: pageSize,
                       onPrevious: drilldown.pagination.hasPrevious
                           ? _previousPage
                           : null,
@@ -157,30 +154,22 @@ class _CommissionSettlementDrilldownScreenState
 /* =========================================================
  * CONTENT
  * ========================================================= */
-
 class _DrilldownContent extends StatelessWidget {
   final SettlementItemsPage drilldown;
   final String currency;
-  final int pageSize;
-
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
-
   final ValueChanged<int> onPageSizeChanged;
-
   const _DrilldownContent({
     required this.drilldown,
     required this.currency,
-    required this.pageSize,
     required this.onPrevious,
     required this.onNext,
     required this.onPageSizeChanged,
   });
-
   @override
   Widget build(BuildContext context) {
     final horizontalPadding = ScreenScalingService.scaleSize(context, 10);
-
     return Column(
       children: [
         Expanded(
@@ -197,9 +186,7 @@ class _DrilldownContent extends StatelessWidget {
                * BATCH SUMMARY
                */
               _SettlementSummaryCard(drilldown: drilldown, currency: currency),
-
               SizedBox(height: ScreenScalingService.scaleSize(context, 20)),
-
               /*
                * ITEMS HEADER
                */
@@ -207,9 +194,7 @@ class _DrilldownContent extends StatelessWidget {
                 title: 'Settlement Items',
                 trailing: drilldown.pagination.totalEntries.toString(),
               ),
-
               SizedBox(height: ScreenScalingService.scaleSize(context, 10)),
-
               /*
                * ITEMS
                */
@@ -230,33 +215,20 @@ class _DrilldownContent extends StatelessWidget {
             ],
           ),
         ),
-
         /*
          * FIXED PAGINATION
          */
-        SafeArea(
-          top: false,
-          child: Container(
-            padding: EdgeInsets.fromLTRB(
-              horizontalPadding,
-              ScreenScalingService.scaleSize(context, 8),
-              horizontalPadding,
-              ScreenScalingService.scaleSize(context, 10),
-            ),
-            decoration: BoxDecoration(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              border: Border(
-                top: BorderSide(color: Colors.grey.withValues(alpha: 0.12)),
-              ),
-            ),
-            child: _PaginationControls(
-              pagination: drilldown.pagination,
-              pageSize: pageSize,
-              onPrevious: onPrevious,
-              onNext: onNext,
-              onPageSizeChanged: onPageSizeChanged,
-            ),
-          ),
+        AppPagination(
+          page: drilldown.pagination.page,
+          totalPages: drilldown.pagination.totalPages,
+          totalEntries: drilldown.pagination.totalEntries,
+          hasPrevious: drilldown.pagination.hasPrevious,
+          hasNext: drilldown.pagination.hasNext,
+          pageSize: drilldown.pagination.pageSize,
+          entryLabel: 'items',
+          onPrevious: () => onPrevious?.call(),
+          onNext: () => onNext?.call(),
+          onPageSizeChanged: onPageSizeChanged,
         ),
       ],
     );
@@ -266,16 +238,13 @@ class _DrilldownContent extends StatelessWidget {
 /* =========================================================
  * BATCH SUMMARY
  * ========================================================= */
-
 class _SettlementSummaryCard extends StatelessWidget {
   final SettlementItemsPage drilldown;
   final String currency;
-
   const _SettlementSummaryCard({
     required this.drilldown,
     required this.currency,
   });
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -299,7 +268,6 @@ class _SettlementSummaryCard extends StatelessWidget {
                   ).copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
-
               Text(
                 currency.toUpperCase(),
                 style: AppTextStyles.small(
@@ -308,13 +276,9 @@ class _SettlementSummaryCard extends StatelessWidget {
               ),
             ],
           ),
-
           SizedBox(height: ScreenScalingService.scaleSize(context, 16)),
-
           _SummaryRow(label: 'Agents', value: drilldown.totalAgents.toString()),
-
           SizedBox(height: ScreenScalingService.scaleSize(context, 10)),
-
           _SummaryRow(
             label: 'Total Amount',
             value: NumberFormatService.formatAmount(
@@ -331,19 +295,14 @@ class _SettlementSummaryCard extends StatelessWidget {
 /* =========================================================
  * ITEM CARD
  * ========================================================= */
-
 class _SettlementItemCard extends StatelessWidget {
   final SettlementItem item;
   final String currency;
-
   const _SettlementItemCard({required this.item, required this.currency});
-
   @override
   Widget build(BuildContext context) {
     final radius = ScreenScalingService.scaleSize(context, 14);
-
     final errorMessage = item.errorMessage?.trim();
-
     return Container(
       padding: EdgeInsets.all(ScreenScalingService.scaleSize(context, 14)),
       decoration: BoxDecoration(
@@ -365,15 +324,11 @@ class _SettlementItemCard extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-
               const Spacer(),
-
               _ItemStatusBadge(status: item.status),
             ],
           ),
-
           SizedBox(height: ScreenScalingService.scaleSize(context, 12)),
-
           /*
            * COMMISSION
            */
@@ -383,9 +338,7 @@ class _SettlementItemCard extends StatelessWidget {
             currency: currency,
             strong: true,
           ),
-
           SizedBox(height: ScreenScalingService.scaleSize(context, 10)),
-
           /*
            * FEES
            */
@@ -394,9 +347,7 @@ class _SettlementItemCard extends StatelessWidget {
             value: item.totalFeesGenerated,
             currency: currency,
           ),
-
           SizedBox(height: ScreenScalingService.scaleSize(context, 10)),
-
           /*
            * WITHDRAWAL VOLUME
            */
@@ -405,13 +356,11 @@ class _SettlementItemCard extends StatelessWidget {
             value: item.totalWithdrawalVolume,
             currency: currency,
           ),
-
           /*
            * ERROR
            */
           if (errorMessage != null && errorMessage.isNotEmpty) ...[
             SizedBox(height: ScreenScalingService.scaleSize(context, 14)),
-
             _ItemErrorMessage(message: errorMessage),
           ],
         ],
@@ -423,16 +372,12 @@ class _SettlementItemCard extends StatelessWidget {
 /* =========================================================
  * ITEM STATUS BADGE
  * ========================================================= */
-
 class _ItemStatusBadge extends StatelessWidget {
   final String status;
-
   const _ItemStatusBadge({required this.status});
-
   @override
   Widget build(BuildContext context) {
     final color = _statusColor(status);
-
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: ScreenScalingService.scaleSize(context, 9),
@@ -458,28 +403,20 @@ class _ItemStatusBadge extends StatelessWidget {
     switch (value.trim().toLowerCase()) {
       case 'draft':
         return Colors.grey;
-
       case 'pending':
         return Colors.amber;
-
       case 'approved':
         return Colors.blue;
-
       case 'processing':
         return Colors.amber;
-
       case 'partial':
         return Colors.orange;
-
       case 'failed':
         return Colors.red;
-
       case 'settled':
         return Colors.green;
-
       case 'rejected':
         return Colors.red;
-
       default:
         return Colors.grey;
     }
@@ -487,11 +424,9 @@ class _ItemStatusBadge extends StatelessWidget {
 
   String _formatStatus(String value) {
     final normalized = value.trim();
-
     if (normalized.isEmpty) {
       return 'Unknown';
     }
-
     return normalized
         .split('_')
         .map(
@@ -507,12 +442,9 @@ class _ItemStatusBadge extends StatelessWidget {
 /* =========================================================
  * ITEM ERROR MESSAGE
  * ========================================================= */
-
 class _ItemErrorMessage extends StatelessWidget {
   final String message;
-
   const _ItemErrorMessage({required this.message});
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -533,9 +465,7 @@ class _ItemErrorMessage extends StatelessWidget {
             size: ScreenScalingService.scaleSize(context, 17),
             color: Colors.red,
           ),
-
           SizedBox(width: ScreenScalingService.scaleSize(context, 8)),
-
           Expanded(
             child: Text(
               message,
@@ -553,20 +483,17 @@ class _ItemErrorMessage extends StatelessWidget {
 /* =========================================================
  * AMOUNT ROW
  * ========================================================= */
-
 class _AmountRow extends StatelessWidget {
   final String label;
   final double value;
   final String currency;
   final bool strong;
-
   const _AmountRow({
     required this.label,
     required this.value,
     required this.currency,
     this.strong = false,
   });
-
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -578,7 +505,6 @@ class _AmountRow extends StatelessWidget {
             context,
           ).copyWith(color: Colors.grey.shade500, fontWeight: FontWeight.w600),
         ),
-
         Text(
           NumberFormatService.formatAmount(value, currency: currency),
           style: strong
@@ -597,13 +523,10 @@ class _AmountRow extends StatelessWidget {
 /* =========================================================
  * SUMMARY ROW
  * ========================================================= */
-
 class _SummaryRow extends StatelessWidget {
   final String label;
   final String value;
-
   const _SummaryRow({required this.label, required this.value});
-
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -615,7 +538,6 @@ class _SummaryRow extends StatelessWidget {
             context,
           ).copyWith(color: Colors.grey.shade500, fontWeight: FontWeight.w600),
         ),
-
         Text(
           value,
           style: AppTextStyles.mediumNumber(
@@ -630,13 +552,10 @@ class _SummaryRow extends StatelessWidget {
 /* =========================================================
  * SECTION HEADER
  * ========================================================= */
-
 class _SectionHeader extends StatelessWidget {
   final String title;
   final String trailing;
-
   const _SectionHeader({required this.title, required this.trailing});
-
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -649,7 +568,6 @@ class _SectionHeader extends StatelessWidget {
             ).copyWith(fontWeight: FontWeight.w700),
           ),
         ),
-
         Container(
           padding: EdgeInsets.symmetric(
             horizontal: ScreenScalingService.scaleSize(context, 9),
@@ -672,147 +590,11 @@ class _SectionHeader extends StatelessWidget {
 }
 
 /* =========================================================
- * PAGINATION
- * ========================================================= */
-
-class _PaginationControls extends StatelessWidget {
-  final ReportPagination pagination;
-  final int pageSize;
-
-  final VoidCallback? onPrevious;
-  final VoidCallback? onNext;
-
-  final ValueChanged<int> onPageSizeChanged;
-
-  const _PaginationControls({
-    required this.pagination,
-    required this.pageSize,
-    required this.onPrevious,
-    required this.onNext,
-    required this.onPageSizeChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final firstEntry = pagination.totalEntries == 0
-        ? 0
-        : ((pagination.page - 1) * pagination.pageSize) + 1;
-
-    final calculatedLast = pagination.page * pagination.pageSize;
-
-    final lastEntry = calculatedLast > pagination.totalEntries
-        ? pagination.totalEntries
-        : calculatedLast;
-
-    return Container(
-      margin: EdgeInsets.only(top: ScreenScalingService.scaleSize(context, 4)),
-      padding: EdgeInsets.all(ScreenScalingService.scaleSize(context, 14)),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(
-          ScreenScalingService.scaleSize(context, 14),
-        ),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Text(
-                pagination.totalEntries == 0
-                    ? 'No entries'
-                    : '$firstEntry - $lastEntry of '
-                          '${pagination.totalEntries}',
-                style: AppTextStyles.tiny(context).copyWith(
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-
-              const Spacer(),
-
-              DropdownButtonHideUnderline(
-                child: DropdownButton<int>(
-                  value: pageSize,
-                  isDense: true,
-                  items: const [
-                    DropdownMenuItem(value: 25, child: Text('25')),
-                    DropdownMenuItem(value: 50, child: Text('50')),
-                    DropdownMenuItem(value: 100, child: Text('100')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      onPageSizeChanged(value);
-                    }
-                  },
-                ),
-              ),
-
-              SizedBox(width: ScreenScalingService.scaleSize(context, 6)),
-
-              Text(
-                'per page',
-                style: AppTextStyles.tiny(
-                  context,
-                ).copyWith(color: Colors.grey.shade500),
-              ),
-            ],
-          ),
-
-          SizedBox(height: ScreenScalingService.scaleSize(context, 14)),
-
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onPrevious,
-                  icon: const Icon(Icons.chevron_left),
-                  label: const Text('Previous'),
-                ),
-              ),
-
-              SizedBox(width: ScreenScalingService.scaleSize(context, 12)),
-
-              Text(
-                '${pagination.page} of '
-                '${pagination.totalPages}',
-                style: AppTextStyles.small(
-                  context,
-                ).copyWith(fontWeight: FontWeight.w700),
-              ),
-
-              SizedBox(width: ScreenScalingService.scaleSize(context, 12)),
-
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: onNext,
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('Next'),
-                      SizedBox(width: 4),
-                      Icon(Icons.chevron_right),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/* =========================================================
  * REFRESHABLE STATE
  * ========================================================= */
-
 class _RefreshableState extends StatelessWidget {
   final Widget child;
-
   const _RefreshableState({required this.child});
-
   @override
   Widget build(BuildContext context) {
     return ListView(

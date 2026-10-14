@@ -46,6 +46,8 @@ class AppSpacing {
   // Component dimensions
   // ---------------------------------------------------------------------------
 
+  double get textButtonHeight => _scale(20);
+
   double get buttonHeight => _scale(48);
 
   double get buttonWidth => _scale(140);

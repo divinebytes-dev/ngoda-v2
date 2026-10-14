@@ -22,19 +22,20 @@ class GoldApiService {
 
   Future<TransactionLoyaltyResult> goldBuy({
     required TransactionData transactionData,
+    required String blockchainCode,
   }) async {
+    final code = blockchainCode.trim().toLowerCase();
+
+    if (code.isEmpty) {
+      throw ArgumentError('Blockchain code is required for Gold Buy.');
+    }
+
     final data = await _functions.invokeData(
       functionName: 'gold-buy',
-      body: {'transaction': transactionData.toJson()},
+      body: {'transaction': transactionData.toJson(), 'blockchain_code': code},
       invalidResponseMessage: 'Invalid gold buy response',
     );
 
-    /*
-     * Preserve the current Gold Buy
-     * response contract:
-     *
-     * data.loyalty
-     */
     final loyalty = data['loyalty'];
 
     if (loyalty is! Map) {
@@ -46,17 +47,35 @@ class GoldApiService {
     );
   }
 
-  Future<void> goldSell({required TransactionData transactionData}) async {
+  Future<void> goldSell({
+    required TransactionData transactionData,
+    required String blockchainCode,
+  }) async {
+    final code = blockchainCode.trim().toLowerCase();
+
+    if (code.isEmpty) {
+      throw ArgumentError('Blockchain code is required for Gold Sell.');
+    }
+
     await _functions.invokeVoid(
       functionName: 'gold-sell',
-      body: {'transaction': transactionData.toJson()},
+      body: {'transaction': transactionData.toJson(), 'blockchain_code': code},
     );
   }
 
-  Future<void> goldTransfer({required TransactionData transactionData}) async {
+  Future<void> goldTransfer({
+    required TransactionData transactionData,
+    required String blockchainCode,
+  }) async {
+    final code = blockchainCode.trim().toLowerCase();
+
+    if (code.isEmpty) {
+      throw ArgumentError('BLOCKCHAIN_CODE_REQUIRED');
+    }
+
     await _functions.invokeVoid(
       functionName: 'gold-transfer',
-      body: {'transaction': transactionData.toJson()},
+      body: {'transaction': transactionData.toJson(), 'blockchain_code': code},
     );
   }
 }

@@ -29,6 +29,8 @@ class VendorDashboardService {
 
       final currencies = response['currencies'];
 
+      final blockchainBalances = response['blockchainBalances'];
+
       if (agentWallet is! Map) {
         throw Exception('Invalid vendor agent wallet response');
       }
@@ -60,6 +62,7 @@ class VendorDashboardService {
         dailySummaryJson: Map<String, dynamic>.from(dailySummary),
         loanSummaryJson: Map<String, dynamic>.from(loanSummary),
         currencies: currencies,
+        blockchainBalances: blockchainBalances,
       );
 
       return R(result: dashboard);

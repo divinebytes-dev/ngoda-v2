@@ -106,7 +106,10 @@ class _GlBalancesContent extends StatelessWidget {
             padding: EdgeInsets.all(spacing.xs),
             decoration: BoxDecoration(
               color: colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(radius.borderRadius),
+              borderRadius: BorderRadius.circular(radius.cardRadius),
+              border: Border.all(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+              ),
             ),
             child: TabBar(
               isScrollable: currencies.length > 4,
@@ -115,7 +118,7 @@ class _GlBalancesContent extends StatelessWidget {
                   : TabAlignment.fill,
               indicator: BoxDecoration(
                 color: colorScheme.primary,
-                borderRadius: BorderRadius.circular(radius.borderRadius),
+                borderRadius: BorderRadius.circular(radius.cardRadius),
               ),
               labelStyle: AppTextStyles.small(context),
               dividerColor: Colors.transparent,
@@ -220,9 +223,11 @@ class _GLCurrencyView extends StatelessWidget {
         decoration: BoxDecoration(
           color: colorScheme.surface,
           borderRadius: BorderRadius.vertical(
-            top: Radius.circular(radius.borderRadius),
+            top: Radius.circular(radius.cardRadius),
           ),
-          border: Border.all(color: colorScheme.outlineVariant),
+          border: Border.all(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+          ),
         ),
         child: Text(
           title,
@@ -238,9 +243,11 @@ class _GLCurrencyView extends StatelessWidget {
           decoration: BoxDecoration(
             color: colorScheme.surface,
             borderRadius: BorderRadius.vertical(
-              bottom: Radius.circular(radius.borderRadius),
+              bottom: Radius.circular(radius.cardRadius),
             ),
-            border: Border.all(color: colorScheme.outlineVariant),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+            ),
           ),
           child: Column(
             children: [
@@ -284,7 +291,9 @@ class _GlHeader extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(radius.borderRadius),
-        border: Border.all(color: colorScheme.outlineVariant),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+        ),
       ),
       child: Column(
         children: [

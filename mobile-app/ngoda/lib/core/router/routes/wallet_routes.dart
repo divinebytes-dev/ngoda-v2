@@ -72,6 +72,7 @@ GoRoute _walletSnapshotRoute() {
         WalletBalanceSnapshotScreen(
           currency: currency,
           walletOwner: walletOwner,
+          blockchainCode: state.extra is String ? state.extra as String : null,
         ),
         state,
       );

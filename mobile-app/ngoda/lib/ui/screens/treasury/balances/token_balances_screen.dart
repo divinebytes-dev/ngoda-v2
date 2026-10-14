@@ -188,7 +188,7 @@ class _BalanceCard extends StatelessWidget {
             currency: 'gold',
           );
 
-          context.push('/profile/token-balances/$params', extra: params);
+          context.push('/tokens/balances/$params', extra: params);
         },
         child: Padding(
           padding: EdgeInsets.all(spacing.lg),

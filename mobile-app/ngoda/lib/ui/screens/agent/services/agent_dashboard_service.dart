@@ -23,6 +23,7 @@ class AgentDashboardService {
           response['loanSummary'] as Map,
         ),
         currencyList: response['currencies'],
+        blockchainBalancesJson: response['blockchainBalances'],
       );
 
       return R(result: dashboard);

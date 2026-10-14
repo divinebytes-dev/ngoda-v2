@@ -12,6 +12,7 @@ import 'package:ngoda/ui/screens/treasury/provider/treasury_dashboard_provider.d
 import 'package:ngoda/ui/screens/treasury/provider/treasury_transaction_provider.dart';
 import 'package:ngoda/ui/shared/app_text_styles.dart';
 import 'package:ngoda/ui/widgets/app_button.dart';
+import 'package:ngoda/ui/widgets/app_search_dropdown_field.dart';
 import 'package:ngoda/ui/widgets/app_empty_state.dart';
 import 'package:ngoda/ui/widgets/app_error_state.dart';
 import 'package:ngoda/ui/widgets/app_loader.dart';
@@ -31,6 +32,7 @@ class _ExecuteTokenAdjustmentScreenState
   static const String _status = 'approved';
 
   Future<void> _refresh() async {
+    ref.invalidate(treasuryDashboardProvider);
     ref.invalidate(tokenAdjustmentProvider(_status));
 
     await ref.read(tokenAdjustmentProvider(_status).future);
@@ -125,7 +127,7 @@ class _RefreshableState extends StatelessWidget {
   }
 }
 
-class TokenAdjustmentBody extends ConsumerWidget {
+class TokenAdjustmentBody extends ConsumerStatefulWidget {
   const TokenAdjustmentBody({
     super.key,
     required this.adjustment,
@@ -136,72 +138,141 @@ class TokenAdjustmentBody extends ConsumerWidget {
   final Future<void> Function() onRefresh;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TokenAdjustmentBody> createState() =>
+      _TokenAdjustmentBodyState();
+}
+
+class _TokenAdjustmentBodyState extends ConsumerState<TokenAdjustmentBody> {
+  String? _blockchainCode;
+
+  @override
+  void didUpdateWidget(covariant TokenAdjustmentBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.adjustment.id != widget.adjustment.id) {
+      _blockchainCode = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final spacing = context.spacing;
-
+    final adjustment = widget.adjustment;
+    final dashboard = ref.watch(treasuryDashboardProvider);
+    final isLoading = ref.watch(treasuryTransactionProvider).isLoading;
+    final balances = dashboard.asData?.value.result?.blockchainBalances;
+    final codes =
+        balances?.map((balance) => balance.blockchainCode).toSet().toList() ??
+        <String>[];
+    final selected = codes.contains(_blockchainCode) ? _blockchainCode : null;
+    final ready =
+        !dashboard.isLoading &&
+        !dashboard.hasError &&
+        dashboard.asData?.value.error == null;
     final current = adjustment.currentCoveragePercent;
-
     final projected = adjustment.projectedCoveragePercent;
-
     final isSafe = adjustment.isSafeAfterApproval;
 
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: Stack(
-        children: [
-          SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.fromLTRB(
-              spacing.lg,
-              spacing.lg,
-              spacing.lg,
-              spacing.xxxxl,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _CoverageInsight(
-                  current: current,
-                  projected: projected,
-                  isSafe: isSafe,
-                ),
-                SizedBox(height: spacing.lg),
-                _DetailsCard(adjustment),
-                SizedBox(height: spacing.lg),
-                _StateCard(
-                  title: 'Current State',
-                  gold: adjustment.availableGold,
-                  tokens: adjustment.totalTokens,
-                  coverage: current,
-                  color: Colors.blue,
-                ),
-                SizedBox(height: spacing.lg),
-                _StateCard(
-                  title: 'After Adjustment',
-                  gold: adjustment.projectedGold,
-                  tokens: adjustment.projectedTokens,
-                  coverage: projected,
-                  color: isSafe ? Colors.green : context.colorScheme.error,
-                ),
-                if (!isSafe) ...[
+    return Column(
+      children: [
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: widget.onRefresh,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.all(spacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _CoverageInsight(
+                    current: current,
+                    projected: projected,
+                    isSafe: isSafe,
+                  ),
                   SizedBox(height: spacing.lg),
-                  const _WarningCard(),
+                  _DetailsCard(adjustment),
+                  SizedBox(height: spacing.lg),
+                  Text(
+                    'Execution Blockchain',
+                    style: AppTextStyles.small(context),
+                  ),
+                  SizedBox(height: spacing.sm),
+                  dashboard.when(
+                    loading: () => const AppLoader(
+                      message: 'Loading treasury blockchain balances',
+                      fullScreen: false,
+                    ),
+                    error: (error, _) =>
+                        AppErrorState(message: error.toString()),
+                    data: (response) {
+                      if (response.error != null) {
+                        return AppErrorState(message: response.error!);
+                      }
+                      if (codes.isEmpty) {
+                        return const AppEmptyState(
+                          message: 'No treasury blockchains available',
+                        );
+                      }
+                      String label(String code) {
+                        final balance = balances!.firstWhere(
+                          (item) => item.blockchainCode == code,
+                        );
+                        return '$code — Treasury balance: '
+                            '${NumberFormatService.formatNumber(balance.balance)} tokens';
+                      }
+
+                      return AbsorbPointer(
+                        absorbing: isLoading,
+                        child: AppSearchDropdownField<String>(
+                          selected: selected,
+                          values: codes,
+                          hint: 'Select blockchain',
+                          displayText: label,
+                          filter: (code, query) =>
+                              code.toLowerCase().contains(query.toLowerCase()),
+                          onSelect: (code) =>
+                              setState(() => _blockchainCode = code),
+                          itemBuilder: (context, code) => Padding(
+                            padding: EdgeInsets.all(spacing.md),
+                            child: Text(
+                              label(code),
+                              style: AppTextStyles.small(context),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  SizedBox(height: spacing.lg),
+                  _StateCard(
+                    title: 'Current State',
+                    gold: adjustment.availableGold,
+                    tokens: adjustment.totalTokens,
+                    coverage: current,
+                    color: Colors.blue,
+                  ),
+                  SizedBox(height: spacing.lg),
+                  _StateCard(
+                    title: 'After Adjustment',
+                    gold: adjustment.projectedGold,
+                    tokens: adjustment.projectedTokens,
+                    coverage: projected,
+                    color: isSafe ? Colors.green : context.colorScheme.error,
+                  ),
+                  if (!isSafe) ...[
+                    SizedBox(height: spacing.lg),
+                    const _WarningCard(),
+                  ],
                 ],
-                SizedBox(height: spacing.xxxxl),
-              ],
+              ),
             ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: _StickyActions(
-              adjustment: adjustment,
-              onCompleted: onRefresh,
-            ),
-          ),
-        ],
-      ),
+        ),
+        _StickyActions(
+          adjustment: adjustment,
+          blockchainCode: ready ? selected : null,
+          onCompleted: widget.onRefresh,
+        ),
+      ],
     );
   }
 }
@@ -376,9 +447,12 @@ class _StateRow extends StatelessWidget {
             ).copyWith(color: colorScheme.onSurfaceVariant),
           ),
         ),
-        Text(
-          NumberFormatService.formatNumber(value),
-          style: AppTextStyles.smallNumber(context),
+        Flexible(
+          child: Text(
+            NumberFormatService.formatNumber(value),
+            textAlign: TextAlign.right,
+            style: AppTextStyles.smallNumber(context),
+          ),
         ),
       ],
     );
@@ -516,32 +590,41 @@ class _WarningCard extends StatelessWidget {
 }
 
 class _StickyActions extends ConsumerWidget {
-  const _StickyActions({required this.adjustment, required this.onCompleted});
+  const _StickyActions({
+    required this.adjustment,
+    required this.onCompleted,
+    required this.blockchainCode,
+  });
 
   final TokenAdjustment adjustment;
+  final String? blockchainCode;
   final Future<void> Function() onCompleted;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final spacing = context.spacing;
-    final colorScheme = context.colorScheme;
 
     final state = ref.watch(treasuryTransactionProvider);
 
     return Container(
       padding: EdgeInsets.all(spacing.md),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        border: Border(top: BorderSide(color: colorScheme.outlineVariant)),
-      ),
+      // decoration: BoxDecoration(
+      //   color: colorScheme.surface,
+      //   border: Border(top: BorderSide(color: colorScheme.outlineVariant)),
+      // ),
       child: AppButton(
         isProcessing: state.isLoading,
-        isDisabled: state.isLoading,
+        isDisabled: state.isLoading || blockchainCode == null,
         text: 'Adjust',
-        onPressed: state.isLoading
+        onPressed: state.isLoading || blockchainCode == null
             ? null
             : () async {
-                final completed = await _submit(context, ref, adjustment);
+                final completed = await _submit(
+                  context,
+                  ref,
+                  adjustment,
+                  blockchainCode!,
+                );
 
                 if (!completed) {
                   return;
@@ -558,6 +641,7 @@ Future<bool> _submit(
   BuildContext context,
   WidgetRef ref,
   TokenAdjustment adjustment,
+  String blockchainCode,
 ) async {
   final notifier = ref.read(treasuryTransactionProvider.notifier);
 
@@ -567,13 +651,17 @@ Future<bool> _submit(
       adjustment.adjustmentType,
       adjustment.quantity,
       adjustment.uom,
+      blockchainCode,
     );
 
     if (confirmed != true) {
       return false;
     }
 
-    await notifier.executeTokenAdjustment(id: adjustment.id);
+    await notifier.executeTokenAdjustment(
+      id: adjustment.id,
+      blockchainCode: blockchainCode,
+    );
 
     if (!context.mounted) {
       return false;
@@ -605,6 +693,7 @@ Future<bool?> _confirm(
   String type,
   double quantity,
   String uom,
+  String blockchainCode,
 ) {
   final tokenUom = quantity == 1 ? 'token' : 'tokens';
 
@@ -612,6 +701,7 @@ Future<bool?> _confirm(
     context,
     title: 'Confirm Token Adjustment',
     rows: [
+      PaymentRow('Blockchain', blockchainCode),
       PaymentRow(
         type.capitalize(),
         '${NumberFormatService.formatNumber(quantity)} '

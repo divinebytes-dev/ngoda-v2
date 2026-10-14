@@ -438,8 +438,8 @@ class FinanceSectionCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(spacing.md),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(radius.borderRadius),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(radius.cardRadius),
+        border: Border.all(color: color.withValues(alpha: 0.09)),
         color: color.withValues(alpha: 0.005),
       ),
       child: Column(

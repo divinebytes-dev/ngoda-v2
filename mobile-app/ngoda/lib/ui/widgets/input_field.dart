@@ -7,7 +7,7 @@ import 'package:ngoda/ui/shared/app_text_styles.dart';
 class InputField extends StatefulWidget {
   final TextEditingController controller;
   final String placeholder;
-
+  final int decimalPlaces;
   final bool obscureText;
   final bool showPasswordToggle;
   final bool readOnly;
@@ -48,6 +48,7 @@ class InputField extends StatefulWidget {
     this.maxLines = 1,
     this.minLines,
     this.maxLength,
+    this.decimalPlaces = 2,
   });
 
   @override
@@ -91,7 +92,19 @@ class _InputFieldState extends State<InputField> {
     final formatters =
         widget.inputFormatters ??
         (_isNumeric
-            ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$'))]
+            ? [
+                TextInputType.number == widget.keyboardType
+                    ? FilteringTextInputFormatter.digitsOnly
+                    : TextInputFormatter.withFunction((oldValue, newValue) {
+                        final pattern = RegExp(
+                          '^\\d*(\\.\\d{0,${widget.decimalPlaces}})?\$',
+                        );
+
+                        return pattern.hasMatch(newValue.text)
+                            ? newValue
+                            : oldValue;
+                      }),
+              ]
             : null);
 
     final suffix = widget.showPasswordToggle

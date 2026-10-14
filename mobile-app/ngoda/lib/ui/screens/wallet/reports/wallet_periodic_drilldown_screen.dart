@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
-import 'package:ngoda/data_models/common/report_pagination.dart';
 import 'package:ngoda/data_models/params/wallet_entry_params.dart';
 import 'package:ngoda/data_models/wallet/periodic_balance_drilldown.dart';
 import 'package:ngoda/data_models/wallet/periodic_balance_entry.dart';
@@ -19,6 +17,7 @@ import 'package:ngoda/ui/shared/app_text_styles.dart';
 import 'package:ngoda/ui/widgets/app_empty_state.dart';
 import 'package:ngoda/ui/widgets/app_error_state.dart';
 import 'package:ngoda/ui/widgets/app_loader.dart';
+import 'package:ngoda/ui/widgets/app_pagination.dart';
 import 'package:ngoda/ui/widgets/view_header.dart';
 
 class WalletPeriodicDrilldownScreen extends ConsumerStatefulWidget {
@@ -127,7 +126,6 @@ class _WalletPeriodicDrilldownScreenState
 
                     return _DrilldownContent(
                       drilldown: drilldown,
-                      pageSize: pageSize,
                       onPrevious: drilldown.pagination.hasPrevious
                           ? _previousPage
                           : null,
@@ -148,32 +146,23 @@ class _WalletPeriodicDrilldownScreenState
 class _DrilldownContent extends StatelessWidget {
   const _DrilldownContent({
     required this.drilldown,
-    required this.pageSize,
     required this.onPrevious,
     required this.onNext,
     required this.onPageSizeChanged,
   });
 
   final PeriodicBalanceDrilldown drilldown;
-
-  final int pageSize;
-
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
-
   final ValueChanged<int> onPageSizeChanged;
 
   @override
   Widget build(BuildContext context) {
     final spacing = context.spacing;
+    final pagination = drilldown.pagination;
 
     final role = getCurrentUser().role;
-    bool canDisplay = false;
-    if (role == "finance") {
-      canDisplay = true;
-    } else if (role == "accounts") {
-      canDisplay = true;
-    }
+    final canDisplay = role == 'finance' || role == 'accounts';
 
     return Column(
       children: [
@@ -194,13 +183,13 @@ class _DrilldownContent extends StatelessWidget {
               _SectionHeader(
                 title: 'Wallet entries',
                 description: 'Movements recorded in this fiscal period.',
-                count: drilldown.pagination.totalEntries,
+                count: pagination.totalEntries,
               ),
 
               SizedBox(height: spacing.sm),
 
               if (!drilldown.hasEntries)
-                SizedBox(height: 220, child: const AppEmptyState())
+                const SizedBox(height: 220, child: AppEmptyState())
               else
                 for (
                   var index = 0;
@@ -229,16 +218,18 @@ class _DrilldownContent extends StatelessWidget {
           ),
         ),
 
-        SafeArea(
-          top: false,
-          child: _PaginationArea(
-            pagination: drilldown.pagination,
-            pageSize: pageSize,
-            onPrevious: onPrevious,
-            onNext: onNext,
+        if (pagination.totalEntries > 0)
+          AppPagination(
+            page: pagination.page,
+            totalPages: pagination.totalPages,
+            totalEntries: pagination.totalEntries,
+            hasPrevious: pagination.hasPrevious,
+            hasNext: pagination.hasNext,
+            pageSize: pagination.pageSize,
+            onPrevious: onPrevious ?? () {},
+            onNext: onNext ?? () {},
             onPageSizeChanged: onPageSizeChanged,
           ),
-        ),
       ],
     );
   }
@@ -270,8 +261,8 @@ class _PeriodSummaryCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(spacing.md),
         border: Border.all(
           color: drilldown.hasDifference
-              ? colorScheme.error.withValues(alpha: 0.30)
-              : _gold.withValues(alpha: 0.25),
+              ? colorScheme.error.withValues(alpha: 0.09)
+              : _gold.withValues(alpha: 0.09),
         ),
       ),
       child: Column(
@@ -844,178 +835,6 @@ class _MovementIcon extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       child: Icon(icon, color: color, size: 20),
-    );
-  }
-}
-
-class _PaginationArea extends StatelessWidget {
-  const _PaginationArea({
-    required this.pagination,
-    required this.pageSize,
-    required this.onPrevious,
-    required this.onNext,
-    required this.onPageSizeChanged,
-  });
-
-  final ReportPagination pagination;
-  final int pageSize;
-  final VoidCallback? onPrevious;
-  final VoidCallback? onNext;
-  final ValueChanged<int> onPageSizeChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final spacing = context.spacing;
-    final colorScheme = context.colorScheme;
-
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        spacing.md,
-        spacing.sm,
-        spacing.md,
-        spacing.md,
-      ),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        border: Border(
-          top: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.45),
-          ),
-        ),
-      ),
-      child: _PaginationControls(
-        pagination: pagination,
-        pageSize: pageSize,
-        onPrevious: onPrevious,
-        onNext: onNext,
-        onPageSizeChanged: onPageSizeChanged,
-      ),
-    );
-  }
-}
-
-class _PaginationControls extends StatelessWidget {
-  const _PaginationControls({
-    required this.pagination,
-    required this.pageSize,
-    required this.onPrevious,
-    required this.onNext,
-    required this.onPageSizeChanged,
-  });
-
-  final ReportPagination pagination;
-  final int pageSize;
-  final VoidCallback? onPrevious;
-  final VoidCallback? onNext;
-  final ValueChanged<int> onPageSizeChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final spacing = context.spacing;
-    final colorScheme = context.colorScheme;
-
-    final firstEntry = pagination.totalEntries == 0
-        ? 0
-        : ((pagination.page - 1) * pagination.pageSize) + 1;
-
-    final calculatedLast = pagination.page * pagination.pageSize;
-
-    final lastEntry = calculatedLast > pagination.totalEntries
-        ? pagination.totalEntries
-        : calculatedLast;
-
-    final totalPages = pagination.totalPages > 0 ? pagination.totalPages : 1;
-
-    return Container(
-      padding: EdgeInsets.all(spacing.md),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(spacing.md),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  pagination.totalEntries == 0
-                      ? 'No entries'
-                      : '$firstEntry - $lastEntry of ${pagination.totalEntries}',
-                  style: AppTextStyles.tiny(context).copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-
-              DropdownButtonHideUnderline(
-                child: DropdownButton<int>(
-                  value: pageSize,
-                  isDense: true,
-                  items: const [
-                    DropdownMenuItem(value: 25, child: Text('25')),
-                    DropdownMenuItem(value: 50, child: Text('50')),
-                    DropdownMenuItem(value: 100, child: Text('100')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      onPageSizeChanged(value);
-                    }
-                  },
-                ),
-              ),
-
-              SizedBox(width: spacing.xs),
-
-              Text(
-                'per page',
-                style: AppTextStyles.tiny(
-                  context,
-                ).copyWith(color: colorScheme.onSurfaceVariant),
-              ),
-            ],
-          ),
-
-          SizedBox(height: spacing.md),
-
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onPrevious,
-                  icon: const Icon(Icons.chevron_left),
-                  label: const Text('Previous'),
-                ),
-              ),
-
-              SizedBox(width: spacing.sm),
-
-              Text(
-                '${pagination.page} of $totalPages',
-                style: AppTextStyles.small(
-                  context,
-                ).copyWith(fontWeight: FontWeight.w700),
-              ),
-
-              SizedBox(width: spacing.sm),
-
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: onNext,
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('Next'),
-                      SizedBox(width: 4),
-                      Icon(Icons.chevron_right),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

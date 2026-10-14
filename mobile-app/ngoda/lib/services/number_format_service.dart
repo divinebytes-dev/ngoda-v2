@@ -19,7 +19,11 @@ abstract final class NumberFormatService {
 
     final currencyData = CurrencyService.get(currencyCode);
 
-    final decimalPlaces = decimals ?? currencyData?.decimals ?? defaultDecimals;
+    int decimalPlaces = decimals ?? currencyData?.decimals ?? defaultDecimals;
+
+    if (currencyCode == 'gold') {
+      decimalPlaces = 4;
+    }
 
     final symbol = currencyData?.symbol ?? CurrencyService.symbol(currencyCode);
 

@@ -22,16 +22,44 @@ class WalletBalanceSnapshotScreen extends ConsumerWidget {
     super.key,
     required this.currency,
     required this.walletOwner,
+    this.blockchainCode,
   });
 
   final String currency;
   final String walletOwner;
+  final String? blockchainCode;
 
   @override
+  @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Validate GOLD blockchain before creating the parameters.
+    if (currency.trim().toLowerCase() == 'gold' &&
+        (blockchainCode == null || blockchainCode!.trim().isEmpty)) {
+      return Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              ViewHeader(
+                title: 'Wallet Balance Snapshots',
+                onClose: () => context.pop(),
+              ),
+              const Expanded(
+                child: AppErrorState(
+                  message:
+                      'Blockchain information is missing for this GOLD wallet. '
+                      'Please go back and select a blockchain.',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final params = WalletSnapshotParams(
       currency: currency,
       walletOwner: walletOwner,
+      blockchainCode: blockchainCode,
     );
 
     final snapshotAsync = ref.watch(walletBalanceSnapshotProvider(params));
@@ -44,7 +72,6 @@ class WalletBalanceSnapshotScreen extends ConsumerWidget {
               title: 'Wallet Balance Snapshots',
               onClose: () {
                 ref.invalidate(walletBalanceSnapshotProvider(params));
-
                 context.pop();
               },
             ),
@@ -78,6 +105,7 @@ class WalletBalanceSnapshotScreen extends ConsumerWidget {
                       snapshot: snapshot,
                       currency: currency,
                       walletOwner: walletOwner,
+                      blockchainCode: blockchainCode,
                     );
                   },
                 ),
@@ -101,11 +129,13 @@ class _WalletSnapshotContent extends StatelessWidget {
     required this.snapshot,
     required this.currency,
     required this.walletOwner,
+    this.blockchainCode,
   });
 
   final WalletBalancePeriod snapshot;
   final String currency;
   final String walletOwner;
+  final String? blockchainCode;
 
   @override
   Widget build(BuildContext context) {
@@ -169,6 +199,7 @@ class _WalletSnapshotContent extends StatelessWidget {
         fiscalYear: snapshot.fiscalYear,
         period: period.period,
         walletOwner: walletOwner,
+        blockchainCode: blockchainCode,
       ),
     );
   }
@@ -328,8 +359,8 @@ class _CurrencyIcon extends StatelessWidget {
               .toUpperCase();
 
     return Container(
-      width: spacing.xl,
-      height: spacing.xl,
+      width: spacing.xxl,
+      height: spacing.xxl,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: _gold.withValues(alpha: 0.12),
@@ -338,9 +369,13 @@ class _CurrencyIcon extends StatelessWidget {
       ),
       child: Text(
         symbol.isNotEmpty ? symbol : fallback,
-        style: AppTextStyles.small(
-          context,
-        ).copyWith(color: _gold, fontWeight: FontWeight.w700),
+        style: currency.toLowerCase() == "gold"
+            ? AppTextStyles.tiny(
+                context,
+              ).copyWith(color: _gold, fontWeight: FontWeight.w700)
+            : AppTextStyles.small(
+                context,
+              ).copyWith(color: _gold, fontWeight: FontWeight.w700),
       ),
     );
   }

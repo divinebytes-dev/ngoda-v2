@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import 'package:ngoda/data_models/params/gl_entry_params.dart';
 import 'package:ngoda/data_models/wallet/periodic_balance_drilldown.dart';
 import 'package:ngoda/data_models/wallet/periodic_balance_entry.dart';
@@ -18,9 +19,9 @@ import 'package:ngoda/ui/widgets/app_pagination.dart';
 import 'package:ngoda/ui/widgets/view_header.dart';
 
 class GlAccountEntriesScreen extends ConsumerStatefulWidget {
-  final GlEntryParams params;
-
   const GlAccountEntriesScreen({super.key, required this.params});
+
+  final GlEntryParams params;
 
   @override
   ConsumerState<GlAccountEntriesScreen> createState() =>
@@ -51,9 +52,7 @@ class _GlAccountEntriesScreenState
   }
 
   void _goToPreviousPage() {
-    if (currentPage <= 1) {
-      return;
-    }
+    if (currentPage <= 1) return;
 
     setState(() {
       currentPage--;
@@ -67,10 +66,17 @@ class _GlAccountEntriesScreenState
   }
 
   void _changePageSize(int newPageSize) {
+    if (newPageSize <= 0 || newPageSize == pageSize) return;
+
     setState(() {
       pageSize = newPageSize;
       currentPage = 1;
     });
+  }
+
+  void _closeScreen() {
+    ref.invalidate(glEntriesProvider(currentParams));
+    context.pop();
   }
 
   @override
@@ -81,14 +87,7 @@ class _GlAccountEntriesScreenState
       body: SafeArea(
         child: Column(
           children: [
-            ViewHeader(
-              title: 'GL Period Entries',
-              onClose: () {
-                ref.invalidate(glEntriesProvider(currentParams));
-
-                context.pop();
-              },
-            ),
+            ViewHeader(title: 'GL Period Entries', onClose: _closeScreen),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _refresh,
@@ -119,7 +118,6 @@ class _GlAccountEntriesScreenState
 
                     return _GlPeriodContent(
                       drilldown: drilldown,
-                      pageSize: pageSize,
                       onPrevious: _goToPreviousPage,
                       onNext: _goToNextPage,
                       onPageSizeChanged: _changePageSize,
@@ -136,88 +134,91 @@ class _GlAccountEntriesScreenState
 }
 
 class _GlPeriodContent extends StatelessWidget {
-  final PeriodicBalanceDrilldown drilldown;
-  final int pageSize;
-  final VoidCallback onPrevious;
-  final VoidCallback onNext;
-  final ValueChanged<int> onPageSizeChanged;
-
   const _GlPeriodContent({
     required this.drilldown,
-    required this.pageSize,
     required this.onPrevious,
     required this.onNext,
     required this.onPageSizeChanged,
   });
+
+  final PeriodicBalanceDrilldown drilldown;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final ValueChanged<int> onPageSizeChanged;
 
   @override
   Widget build(BuildContext context) {
     final spacing = context.spacing;
     final pagination = drilldown.pagination;
 
-    return CustomScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        SliverToBoxAdapter(child: _PeriodHeader(drilldown: drilldown)),
-        if (drilldown.entries.isEmpty)
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 250, child: AppEmptyState()),
-          )
-        else
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(
-              spacing.padding,
-              0,
-              spacing.padding,
-              spacing.sm,
-            ),
-            sliver: SliverList.builder(
-              itemCount: drilldown.entries.length,
-              itemBuilder: (context, index) {
-                final entry = drilldown.entries[index];
+    return Column(
+      children: [
+        Expanded(
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(child: _PeriodHeader(drilldown: drilldown)),
 
-                return _EntryCard(
-                  entry: entry,
-                  glAccount: drilldown.glAccountCode,
-                  currency: drilldown.currencyCode,
-                );
-              },
-            ),
-          ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              spacing.padding,
-              spacing.xs,
-              spacing.padding,
-              spacing.sm,
-            ),
-            child: AppPagination(
-              page: pagination.page,
-              totalPages: pagination.totalPages,
-              totalEntries: pagination.totalEntries,
-              hasPrevious: pagination.hasPrevious,
-              hasNext: pagination.hasNext,
-              onPrevious: onPrevious,
-              onNext: onNext,
-              pageSize: pageSize,
-              onPageSizeChanged: onPageSizeChanged,
-              entryLabel: 'entries',
-            ),
+              if (drilldown.entries.isEmpty)
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: 250, child: AppEmptyState()),
+                )
+              else
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    spacing.padding,
+                    0,
+                    spacing.padding,
+                    spacing.sm,
+                  ),
+                  sliver: SliverList.builder(
+                    itemCount: drilldown.entries.length,
+                    itemBuilder: (context, index) {
+                      final entry = drilldown.entries[index];
+
+                      return _EntryCard(
+                        entry: entry,
+                        glAccount: drilldown.glAccountCode,
+                        currency: drilldown.currencyCode,
+                      );
+                    },
+                  ),
+                ),
+
+              SliverToBoxAdapter(
+                child: _PeriodTotalsCard(drilldown: drilldown),
+              ),
+
+              SliverToBoxAdapter(
+                child: _BalanceStatusCard(drilldown: drilldown),
+              ),
+
+              SliverToBoxAdapter(child: SizedBox(height: spacing.xl)),
+            ],
           ),
         ),
-        SliverToBoxAdapter(child: _PeriodTotalsCard(drilldown: drilldown)),
-        SliverToBoxAdapter(child: _BalanceStatusCard(drilldown: drilldown)),
-        SliverToBoxAdapter(child: SizedBox(height: spacing.xl)),
+
+        if (pagination.totalEntries > 0)
+          AppPagination(
+            page: pagination.page,
+            totalPages: pagination.totalPages,
+            totalEntries: pagination.totalEntries,
+            hasPrevious: pagination.hasPrevious,
+            hasNext: pagination.hasNext,
+            pageSize: pagination.pageSize,
+            onPrevious: onPrevious,
+            onNext: onNext,
+            onPageSizeChanged: onPageSizeChanged,
+          ),
       ],
     );
   }
 }
 
 class _PeriodHeader extends StatelessWidget {
-  final PeriodicBalanceDrilldown drilldown;
-
   const _PeriodHeader({required this.drilldown});
+
+  final PeriodicBalanceDrilldown drilldown;
 
   @override
   Widget build(BuildContext context) {
@@ -236,7 +237,9 @@ class _PeriodHeader extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(radius.borderRadius),
-        border: Border.all(color: colorScheme.outlineVariant),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -247,7 +250,9 @@ class _PeriodHeader extends StatelessWidget {
               context,
             ).copyWith(fontWeight: FontWeight.w700),
           ),
+
           SizedBox(height: spacing.xs),
+
           Row(
             children: [
               Expanded(
@@ -258,7 +263,9 @@ class _PeriodHeader extends StatelessWidget {
                   ).copyWith(color: colorScheme.onSurfaceVariant),
                 ),
               ),
+
               SizedBox(width: spacing.sm),
+
               Text(
                 drilldown.currencyCode.toUpperCase(),
                 style: AppTextStyles.small(
@@ -267,14 +274,20 @@ class _PeriodHeader extends StatelessWidget {
               ),
             ],
           ),
+
           SizedBox(height: spacing.md),
+
           _TextRow(
             label: 'Fiscal Year',
             value: drilldown.fiscalYear.toString(),
           ),
+
           SizedBox(height: spacing.sm),
+
           _TextRow(label: 'Period', value: drilldown.period.toString()),
+
           SizedBox(height: spacing.sm),
+
           _AmountRow(
             label: 'Opening Balance',
             value: drilldown.openingBalance,
@@ -288,10 +301,10 @@ class _PeriodHeader extends StatelessWidget {
 }
 
 class _TextRow extends StatelessWidget {
+  const _TextRow({required this.label, required this.value});
+
   final String label;
   final String value;
-
-  const _TextRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -318,15 +331,15 @@ class _TextRow extends StatelessWidget {
 }
 
 class _EntryCard extends StatelessWidget {
-  final PeriodicBalanceEntry entry;
-  final String glAccount;
-  final String currency;
-
   const _EntryCard({
     required this.entry,
     required this.glAccount,
     required this.currency,
   });
+
+  final PeriodicBalanceEntry entry;
+  final String glAccount;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -340,10 +353,7 @@ class _EntryCard extends StatelessWidget {
       onTap: entry.documentNumber.isEmpty
           ? null
           : () {
-              context.push(
-                '/recent-transactions/'
-                '${entry.documentNumber}',
-              );
+              context.push('/recent-transactions/${entry.documentNumber}');
             },
       child: Container(
         margin: EdgeInsets.only(bottom: spacing.sm),
@@ -351,7 +361,9 @@ class _EntryCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: colorScheme.surface,
           borderRadius: BorderRadius.circular(radius.borderRadius),
-          border: Border.all(color: colorScheme.outlineVariant),
+          border: Border.all(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -366,13 +378,16 @@ class _EntryCard extends StatelessWidget {
                     ).copyWith(fontWeight: FontWeight.w700),
                   ),
                 ),
+
                 SizedBox(width: spacing.sm),
+
                 Text(
                   DateFormatService.formatDateTime(entry.createdAt),
                   style: AppTextStyles.tiny(
                     context,
                   ).copyWith(color: colorScheme.onSurfaceVariant),
                 ),
+
                 if (entry.documentNumber.isNotEmpty) ...[
                   SizedBox(width: spacing.sm),
                   Icon(
@@ -383,6 +398,7 @@ class _EntryCard extends StatelessWidget {
                 ],
               ],
             ),
+
             if (entry.documentNumber.isNotEmpty) ...[
               SizedBox(height: spacing.xs),
               Text(
@@ -393,7 +409,9 @@ class _EntryCard extends StatelessWidget {
                 ),
               ),
             ],
+
             SizedBox(height: spacing.sm),
+
             Row(
               children: [
                 Expanded(
@@ -404,7 +422,9 @@ class _EntryCard extends StatelessWidget {
                     color: getEntryColor(accountCode: glAccount, isDebit: true),
                   ),
                 ),
+
                 SizedBox(width: spacing.sm),
+
                 Expanded(
                   child: _EntryAmount(
                     label: 'Credit',
@@ -418,9 +438,13 @@ class _EntryCard extends StatelessWidget {
                 ),
               ],
             ),
+
             SizedBox(height: spacing.sm),
-            Divider(color: colorScheme.outlineVariant),
+
+            Divider(color: colorScheme.outlineVariant.withValues(alpha: 0.09)),
+
             SizedBox(height: spacing.xs),
+
             _AmountRow(
               label: 'Running Balance',
               value: entry.runningBalance,
@@ -435,17 +459,17 @@ class _EntryCard extends StatelessWidget {
 }
 
 class _EntryAmount extends StatelessWidget {
-  final String label;
-  final double value;
-  final String currency;
-  final Color color;
-
   const _EntryAmount({
     required this.label,
     required this.value,
     required this.currency,
     required this.color,
   });
+
+  final String label;
+  final double value;
+  final String currency;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -461,7 +485,9 @@ class _EntryAmount extends StatelessWidget {
             context,
           ).copyWith(color: colorScheme.onSurfaceVariant),
         ),
+
         SizedBox(height: spacing.xs),
+
         Text(
           value == 0
               ? '-'
@@ -477,9 +503,9 @@ class _EntryAmount extends StatelessWidget {
 }
 
 class _PeriodTotalsCard extends StatelessWidget {
-  final PeriodicBalanceDrilldown drilldown;
-
   const _PeriodTotalsCard({required this.drilldown});
+
+  final PeriodicBalanceDrilldown drilldown;
 
   @override
   Widget build(BuildContext context) {
@@ -498,7 +524,9 @@ class _PeriodTotalsCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(radius.borderRadius),
-        border: Border.all(color: colorScheme.outlineVariant),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+        ),
       ),
       child: Column(
         children: [
@@ -507,25 +535,33 @@ class _PeriodTotalsCard extends StatelessWidget {
             value: drilldown.openingBalance,
             currency: drilldown.currencyCode,
           ),
+
           SizedBox(height: spacing.sm),
+
           _AmountRow(
             label: 'Total Debit',
             value: drilldown.totalDebit,
             currency: drilldown.currencyCode,
           ),
+
           SizedBox(height: spacing.sm),
+
           _AmountRow(
             label: 'Total Credit',
             value: drilldown.totalCredit,
             currency: drilldown.currencyCode,
           ),
+
           SizedBox(height: spacing.sm),
+
           _AmountRow(
             label: 'Calculated Closing',
             value: drilldown.calculatedClosingBalance,
             currency: drilldown.currencyCode,
           ),
+
           SizedBox(height: spacing.sm),
+
           _AmountRow(
             label: 'Snapshot Closing',
             value: drilldown.closingBalance,
@@ -539,17 +575,17 @@ class _PeriodTotalsCard extends StatelessWidget {
 }
 
 class _AmountRow extends StatelessWidget {
-  final String label;
-  final double value;
-  final String currency;
-  final bool strong;
-
   const _AmountRow({
     required this.label,
     required this.value,
     required this.currency,
     this.strong = false,
   });
+
+  final String label;
+  final double value;
+  final String currency;
+  final bool strong;
 
   @override
   Widget build(BuildContext context) {
@@ -565,6 +601,7 @@ class _AmountRow extends StatelessWidget {
             fontWeight: strong ? FontWeight.w700 : FontWeight.w500,
           ),
         ),
+
         Flexible(
           child: Text(
             NumberFormatService.formatAmount(value, currency: currency),
@@ -581,9 +618,9 @@ class _AmountRow extends StatelessWidget {
 }
 
 class _BalanceStatusCard extends StatelessWidget {
-  final PeriodicBalanceDrilldown drilldown;
-
   const _BalanceStatusCard({required this.drilldown});
+
+  final PeriodicBalanceDrilldown drilldown;
 
   @override
   Widget build(BuildContext context) {
@@ -608,7 +645,9 @@ class _BalanceStatusCard extends StatelessWidget {
             drilldown.balanced ? Icons.check_circle : Icons.error_outline,
             color: color,
           ),
+
           SizedBox(width: spacing.sm),
+
           Expanded(
             child: Text(
               drilldown.balanced ? 'Balanced' : 'Out of balance',
@@ -617,6 +656,7 @@ class _BalanceStatusCard extends StatelessWidget {
               ).copyWith(color: color, fontWeight: FontWeight.w700),
             ),
           ),
+
           if (!drilldown.balanced)
             Flexible(
               child: Text(
@@ -638,9 +678,9 @@ class _BalanceStatusCard extends StatelessWidget {
 }
 
 class _RefreshableState extends StatelessWidget {
-  final Widget child;
-
   const _RefreshableState({required this.child});
+
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {

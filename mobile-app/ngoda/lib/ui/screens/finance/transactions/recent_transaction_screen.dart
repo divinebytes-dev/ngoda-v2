@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import 'package:ngoda/data_models/finance/finance_currency_transactions.dart';
 import 'package:ngoda/data_models/finance/finance_transaction.dart';
 import 'package:ngoda/data_models/finance/finance_transaction_summary.dart';
@@ -16,6 +17,7 @@ import 'package:ngoda/ui/shared/app_text_styles.dart';
 import 'package:ngoda/ui/widgets/app_empty_state.dart';
 import 'package:ngoda/ui/widgets/app_error_state.dart';
 import 'package:ngoda/ui/widgets/app_loader.dart';
+import 'package:ngoda/ui/widgets/app_pagination.dart';
 import 'package:ngoda/ui/widgets/view_header.dart';
 
 class RecentTransactionScreen extends ConsumerStatefulWidget {
@@ -33,19 +35,16 @@ class _RecentTransactionScreenState
   late DateTimeRange _selectedDateRange;
 
   FinanceTransactionSummary? _summary;
+  int _requestGeneration = 0;
 
   final Set<String> _loadingCurrencies = {};
+  final Map<String, int> _currencyPageSizes = {};
 
   @override
   void initState() {
     super.initState();
 
-    final now = DateTime.now();
-
-    _selectedDateRange = DateTimeRange(
-      start: DateTime(now.year, 1, 1),
-      end: DateTime(now.year, now.month, now.day),
-    );
+    _selectedDateRange = _defaultDateRange();
 
     params = FinancialStatementParams(
       startDate: _formatApiDate(_selectedDateRange.start),
@@ -55,13 +54,27 @@ class _RecentTransactionScreenState
     );
   }
 
+  DateTimeRange _defaultDateRange() {
+    final now = DateTime.now();
+
+    return DateTimeRange(
+      start: DateTime(now.year, 1, 1),
+      end: DateTime(now.year, now.month, now.day),
+    );
+  }
+
   String _formatApiDate(DateTime date) {
     return '${date.year.toString().padLeft(4, '0')}-'
         '${date.month.toString().padLeft(2, '0')}-'
         '${date.day.toString().padLeft(2, '0')}';
   }
 
+  int _pageSizeForCurrency(String currency) {
+    return _currencyPageSizes[currency.toLowerCase()] ?? params.pageSize;
+  }
+
   Future<void> _refresh() async {
+    final generation = ++_requestGeneration;
     final refreshParams = FinancialStatementParams(
       startDate: params.startDate,
       endDate: params.endDate,
@@ -75,9 +88,7 @@ class _RecentTransactionScreenState
       recentTransactionsProvider(refreshParams).future,
     );
 
-    if (!mounted) {
-      return;
-    }
+    if (!mounted || generation != _requestGeneration) return;
 
     if (response.error != null || response.result == null) {
       return;
@@ -86,6 +97,8 @@ class _RecentTransactionScreenState
     setState(() {
       params = refreshParams;
       _summary = response.result;
+      _currencyPageSizes.clear();
+      _loadingCurrencies.clear();
     });
   }
 
@@ -102,11 +115,10 @@ class _RecentTransactionScreenState
       cancelText: 'Cancel',
     );
 
-    if (!mounted || selectedRange == null) {
-      return;
-    }
+    if (!mounted || selectedRange == null) return;
 
     setState(() {
+      _requestGeneration++;
       _selectedDateRange = selectedRange;
 
       params = FinancialStatementParams(
@@ -118,18 +130,15 @@ class _RecentTransactionScreenState
 
       _summary = null;
       _loadingCurrencies.clear();
+      _currencyPageSizes.clear();
     });
   }
 
   void _resetDateRange() {
-    final now = DateTime.now();
-
-    final defaultRange = DateTimeRange(
-      start: DateTime(now.year, 1, 1),
-      end: DateTime(now.year, now.month, now.day),
-    );
+    final defaultRange = _defaultDateRange();
 
     setState(() {
+      _requestGeneration++;
       _selectedDateRange = defaultRange;
 
       params = FinancialStatementParams(
@@ -141,6 +150,7 @@ class _RecentTransactionScreenState
 
       _summary = null;
       _loadingCurrencies.clear();
+      _currencyPageSizes.clear();
     });
   }
 
@@ -149,59 +159,123 @@ class _RecentTransactionScreenState
     required int page,
     required FinanceTransactionSummary currentSummary,
   }) async {
-    if (page < 1) {
-      return;
-    }
+    if (page < 1) return;
 
     final normalizedCurrency = currency.toLowerCase();
-
-    if (_loadingCurrencies.contains(normalizedCurrency)) {
-      return;
-    }
 
     final pageParams = FinancialStatementParams(
       startDate: params.startDate,
       endDate: params.endDate,
       currency: normalizedCurrency,
       page: page,
-      pageSize: params.pageSize,
+      pageSize: _pageSizeForCurrency(normalizedCurrency),
     );
 
+    await _loadCurrencyPage(
+      currency: normalizedCurrency,
+      pageParams: pageParams,
+      currentSummary: currentSummary,
+    );
+  }
+
+  Future<void> _changePageSize({
+    required String currency,
+    required int pageSize,
+    required FinanceTransactionSummary currentSummary,
+  }) async {
+    if (pageSize < 1) return;
+
+    final normalizedCurrency = currency.toLowerCase();
+
+    final pageParams = FinancialStatementParams(
+      startDate: params.startDate,
+      endDate: params.endDate,
+      currency: normalizedCurrency,
+      page: 1,
+      pageSize: pageSize,
+    );
+
+    await _loadCurrencyPage(
+      currency: normalizedCurrency,
+      pageParams: pageParams,
+      currentSummary: currentSummary,
+      updatedPageSize: pageSize,
+    );
+  }
+
+  void _showPageError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _loadCurrencyPage({
+    required String currency,
+    required FinancialStatementParams pageParams,
+    required FinanceTransactionSummary currentSummary,
+    int? updatedPageSize,
+  }) async {
+    if (_loadingCurrencies.contains(currency)) return;
+
+    final generation = _requestGeneration;
+
     setState(() {
-      _loadingCurrencies.add(normalizedCurrency);
+      _summary ??= currentSummary;
+      _loadingCurrencies.add(currency);
     });
 
     try {
-      final response = await ref.read(
-        recentTransactionsProvider(pageParams).future,
-      );
+      final provider = recentTransactionsProvider(pageParams);
+      ref.invalidate(provider);
+      final response = await ref.read(provider.future);
 
-      if (!mounted) {
+      if (!mounted || generation != _requestGeneration) return;
+
+      if (response.error != null) {
+        _showPageError(response.error.toString());
         return;
       }
 
-      if (response.error != null || response.result == null) {
+      final result = response.result;
+      if (result == null) {
+        _showPageError('No transaction response was returned.');
         return;
       }
 
-      final updatedCurrency = response.result!.getByCurrency(
-        normalizedCurrency,
-      );
-
+      final updatedCurrency = result.getByCurrency(currency);
       if (updatedCurrency == null) {
+        _showPageError(
+          'No transaction page was returned for ${currency.toUpperCase()}.',
+        );
+        return;
+      }
+
+      final pagination = updatedCurrency.pagination;
+      if (pagination.page != pageParams.page ||
+          pagination.pageSize != pageParams.pageSize) {
+        _showPageError(
+          'Requested page ${pageParams.page} (${pageParams.pageSize} per page), '
+          'but received page ${pagination.page} (${pagination.pageSize} per page).',
+        );
         return;
       }
 
       setState(() {
-        _summary = currentSummary.replaceCurrency(
-          currency: normalizedCurrency,
+        _summary = (_summary ?? currentSummary).replaceCurrency(
+          currency: currency,
           statement: updatedCurrency,
         );
+        _currencyPageSizes[currency] = pagination.pageSize;
       });
+    } catch (error) {
+      if (mounted && generation == _requestGeneration) {
+        _showPageError(error.toString());
+      }
     } finally {
-      if (mounted) {
+      if (mounted && generation == _requestGeneration) {
         setState(() {
-          _loadingCurrencies.remove(normalizedCurrency);
+          _loadingCurrencies.remove(currency);
         });
       }
     }
@@ -209,7 +283,6 @@ class _RecentTransactionScreenState
 
   void _closeScreen() {
     ref.invalidate(recentTransactionsProvider(params));
-
     context.pop();
   }
 
@@ -222,11 +295,13 @@ class _RecentTransactionScreenState
         child: Column(
           children: [
             ViewHeader(title: 'Recent Transactions', onClose: _closeScreen),
+
             _DateRangeSelector(
               selectedDateRange: _selectedDateRange,
               onSelect: _selectDateRange,
               onReset: _resetDateRange,
             ),
+
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _refresh,
@@ -237,6 +312,7 @@ class _RecentTransactionScreenState
                         summary: _summary!,
                         loadingCurrencies: _loadingCurrencies,
                         onPageChanged: _changePage,
+                        onPageSizeChanged: _changePageSize,
                       );
                     }
 
@@ -279,6 +355,7 @@ class _RecentTransactionScreenState
                       summary: displayedSummary,
                       loadingCurrencies: _loadingCurrencies,
                       onPageChanged: _changePage,
+                      onPageSizeChanged: _changePageSize,
                     );
                   },
                 ),
@@ -292,15 +369,15 @@ class _RecentTransactionScreenState
 }
 
 class _DateRangeSelector extends StatelessWidget {
-  final DateTimeRange selectedDateRange;
-  final VoidCallback onSelect;
-  final VoidCallback onReset;
-
   const _DateRangeSelector({
     required this.selectedDateRange,
     required this.onSelect,
     required this.onReset,
   });
+
+  final DateTimeRange selectedDateRange;
+  final VoidCallback onSelect;
+  final VoidCallback onReset;
 
   String _formatDisplayDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/'
@@ -340,7 +417,9 @@ class _DateRangeSelector extends StatelessWidget {
           child: Row(
             children: [
               Icon(Icons.date_range_outlined, size: iconSize.small),
+
               SizedBox(width: spacing.sm),
+
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -351,7 +430,9 @@ class _DateRangeSelector extends StatelessWidget {
                         context,
                       ).copyWith(color: colorScheme.onSurfaceVariant),
                     ),
+
                     SizedBox(height: spacing.xs),
+
                     Text(
                       '${_formatDisplayDate(selectedDateRange.start)} — '
                       '${_formatDisplayDate(selectedDateRange.end)}',
@@ -362,12 +443,14 @@ class _DateRangeSelector extends StatelessWidget {
                   ],
                 ),
               ),
+
               IconButton(
                 onPressed: onReset,
                 tooltip: 'Reset period',
                 padding: EdgeInsets.zero,
                 icon: Icon(Icons.refresh, size: iconSize.small),
               ),
+
               Icon(
                 Icons.chevron_right,
                 size: iconSize.small,
@@ -382,6 +465,13 @@ class _DateRangeSelector extends StatelessWidget {
 }
 
 class _TransactionBody extends StatefulWidget {
+  const _TransactionBody({
+    required this.summary,
+    required this.loadingCurrencies,
+    required this.onPageChanged,
+    required this.onPageSizeChanged,
+  });
+
   final FinanceTransactionSummary summary;
   final Set<String> loadingCurrencies;
 
@@ -392,11 +482,12 @@ class _TransactionBody extends StatefulWidget {
   })
   onPageChanged;
 
-  const _TransactionBody({
-    required this.summary,
-    required this.loadingCurrencies,
-    required this.onPageChanged,
-  });
+  final Future<void> Function({
+    required String currency,
+    required int pageSize,
+    required FinanceTransactionSummary currentSummary,
+  })
+  onPageSizeChanged;
 
   @override
   State<_TransactionBody> createState() {
@@ -405,7 +496,7 @@ class _TransactionBody extends StatefulWidget {
 }
 
 class _TransactionBodyState extends State<_TransactionBody>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late TabController _tabController;
 
   List<String> get currencies {
@@ -463,7 +554,6 @@ class _TransactionBodyState extends State<_TransactionBody>
   @override
   void dispose() {
     _tabController.dispose();
-
     super.dispose();
   }
 
@@ -509,7 +599,9 @@ class _TransactionBodyState extends State<_TransactionBody>
             }).toList(),
           ),
         ),
+
         SizedBox(height: spacing.sm),
+
         Expanded(
           child: TabBarView(
             controller: _tabController,
@@ -521,6 +613,7 @@ class _TransactionBodyState extends State<_TransactionBody>
               }
 
               return _TransactionList(
+                key: ValueKey(currency),
                 currency: currency,
                 statement: currencyStatement,
                 isLoading: _isLoading(currency),
@@ -528,6 +621,13 @@ class _TransactionBodyState extends State<_TransactionBody>
                   return widget.onPageChanged(
                     currency: currency,
                     page: page,
+                    currentSummary: widget.summary,
+                  );
+                },
+                onPageSizeChanged: (pageSize) {
+                  return widget.onPageSizeChanged(
+                    currency: currency,
+                    pageSize: pageSize,
                     currentSummary: widget.summary,
                   );
                 },
@@ -541,17 +641,21 @@ class _TransactionBodyState extends State<_TransactionBody>
 }
 
 class _TransactionList extends StatelessWidget {
-  final String currency;
-  final FinanceCurrencyTransactions statement;
-  final bool isLoading;
-  final Future<void> Function(int page) onPageChanged;
-
   const _TransactionList({
+    super.key,
     required this.currency,
     required this.statement,
     required this.isLoading,
     required this.onPageChanged,
+    required this.onPageSizeChanged,
   });
+
+  final String currency;
+  final FinanceCurrencyTransactions statement;
+  final bool isLoading;
+
+  final Future<void> Function(int page) onPageChanged;
+  final Future<void> Function(int pageSize) onPageSizeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -575,123 +679,43 @@ class _TransactionList extends StatelessWidget {
                   ),
                   itemCount: transactions.length,
                   itemBuilder: (context, index) {
-                    final transaction = transactions[index];
-
                     return _TransactionItem(
-                      tx: transaction,
+                      tx: transactions[index],
                       currency: currency,
                     );
                   },
                 ),
         ),
-        _PaginationControls(
-          page: pagination.page,
-          totalPages: pagination.totalPages,
-          totalEntries: pagination.totalEntries,
-          hasPrevious: pagination.hasPrevious,
-          hasNext: pagination.hasNext,
-          isLoading: isLoading,
-          onPageChanged: onPageChanged,
-        ),
+
+        if (pagination.totalEntries > 0)
+          AppPagination(
+            page: pagination.page,
+            totalPages: pagination.totalPages,
+            totalEntries: pagination.totalEntries,
+            hasPrevious: pagination.page > 1,
+            hasNext: pagination.page < pagination.totalPages,
+            isLoading: isLoading,
+            pageSize: pagination.pageSize,
+            onPrevious: () {
+              onPageChanged(pagination.page - 1);
+            },
+            onNext: () {
+              onPageChanged(pagination.page + 1);
+            },
+            onPageSizeChanged: (pageSize) {
+              onPageSizeChanged(pageSize);
+            },
+          ),
       ],
     );
   }
 }
 
-class _PaginationControls extends StatelessWidget {
-  final int page;
-  final int totalPages;
-  final int totalEntries;
-  final bool hasPrevious;
-  final bool hasNext;
-  final bool isLoading;
-  final Future<void> Function(int page) onPageChanged;
-
-  const _PaginationControls({
-    required this.page,
-    required this.totalPages,
-    required this.totalEntries,
-    required this.hasPrevious,
-    required this.hasNext,
-    required this.isLoading,
-    required this.onPageChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final spacing = context.spacing;
-    final colorScheme = context.colorScheme;
-
-    if (totalEntries == 0) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        spacing.padding,
-        spacing.sm,
-        spacing.padding,
-        spacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        border: Border(top: BorderSide(color: colorScheme.outlineVariant)),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: hasPrevious && !isLoading
-                ? () {
-                    onPageChanged(page - 1);
-                  }
-                : null,
-            icon: const Icon(Icons.chevron_left),
-          ),
-          Expanded(
-            child: Column(
-              children: [
-                if (isLoading)
-                  const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  Text(
-                    'Page $page of $totalPages',
-                    style: AppTextStyles.tiny(
-                      context,
-                    ).copyWith(fontWeight: FontWeight.w700),
-                  ),
-                SizedBox(height: spacing.xs),
-                Text(
-                  '$totalEntries transactions',
-                  style: AppTextStyles.tinyNumber(
-                    context,
-                  ).copyWith(color: colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: hasNext && !isLoading
-                ? () {
-                    onPageChanged(page + 1);
-                  }
-                : null,
-            icon: const Icon(Icons.chevron_right),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _TransactionItem extends StatelessWidget {
+  const _TransactionItem({required this.tx, required this.currency});
+
   final FinanceTransaction tx;
   final String currency;
-
-  const _TransactionItem({required this.tx, required this.currency});
 
   @override
   Widget build(BuildContext context) {
@@ -708,10 +732,7 @@ class _TransactionItem extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(radius.borderRadius),
         onTap: () {
-          context.push(
-            '/recent-transactions/'
-            '${tx.documentNumber}',
-          );
+          context.push('/recent-transactions/${tx.documentNumber}');
         },
         child: Container(
           margin: EdgeInsets.only(bottom: spacing.sm),
@@ -805,9 +826,9 @@ class _TransactionItem extends StatelessWidget {
 }
 
 class _RefreshableState extends StatelessWidget {
-  final Widget child;
-
   const _RefreshableState({required this.child});
+
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {

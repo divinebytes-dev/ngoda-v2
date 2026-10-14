@@ -2,6 +2,7 @@ import 'package:ngoda/data_models/gamification/loyalty/transaction_loyalty_resul
 import 'package:ngoda/data_models/loan/active_loan.dart';
 import 'package:ngoda/data_models/loan/loan_detail.dart';
 import 'package:ngoda/data_models/loan/loan_preview.dart';
+import 'package:ngoda/data_models/params/loan_details_params.dart';
 import 'package:ngoda/data_models/transaction/transaction_data.dart';
 import 'package:ngoda/services/supabase_function_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -27,16 +28,10 @@ class LoanApiService {
     }).toList();
   }
 
-  Future<LoanDetails> fetchLoanEntries(String id) async {
-    final loanId = id.trim();
-
-    if (loanId.isEmpty) {
-      throw ArgumentError.value(id, 'id', 'Loan ID cannot be empty.');
-    }
-
+  Future<LoanDetails> fetchLoanEntries(LoanDetailsParams params) async {
     final data = await _functions.invokeData(
       functionName: 'loan-detail',
-      body: {'loan_id': loanId},
+      body: params.toQueryParameters(),
       invalidResponseMessage: 'Invalid loan detail response',
     );
 

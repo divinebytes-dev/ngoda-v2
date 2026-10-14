@@ -134,13 +134,15 @@ class _DateRangeSelector extends StatelessWidget {
         borderRadius: BorderRadius.circular(radius.borderRadius),
         child: Container(
           padding: EdgeInsets.symmetric(
-            horizontal: spacing.md,
+            horizontal: spacing.sm,
             vertical: spacing.sm,
           ),
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainer,
             borderRadius: BorderRadius.circular(radius.borderRadius),
-            border: Border.all(color: colorScheme.outlineVariant),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+            ),
           ),
           child: Row(
             children: [
@@ -207,6 +209,9 @@ class _TotalsCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(radius.borderRadius),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -630,11 +635,14 @@ class _CurrencyTabs extends StatelessWidget {
     final colorScheme = context.colorScheme;
 
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: spacing.padding),
+      margin: EdgeInsets.symmetric(horizontal: spacing.sm),
       padding: EdgeInsets.all(spacing.xs),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(radius.borderRadius),
+        borderRadius: BorderRadius.circular(radius.cardRadius),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+        ),
       ),
       child: TabBar(
         controller: controller,
@@ -642,7 +650,7 @@ class _CurrencyTabs extends StatelessWidget {
         dividerColor: Colors.transparent,
         indicator: BoxDecoration(
           color: colorScheme.primary,
-          borderRadius: BorderRadius.circular(radius.borderRadius),
+          borderRadius: BorderRadius.circular(radius.cardRadius),
         ),
         indicatorSize: TabBarIndicatorSize.tab,
         labelColor: colorScheme.onPrimary,

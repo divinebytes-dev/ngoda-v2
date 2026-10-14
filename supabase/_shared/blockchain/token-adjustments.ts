@@ -1,5 +1,10 @@
+
 import {
-  ethers,
+  ContractTransactionResponse,
+  getAddress,
+  isAddress,
+  parseEther,
+  parseUnits,
 } from "ethers";
 
 import {
@@ -7,25 +12,55 @@ import {
 } from "../app-error.ts";
 
 import {
-  blockchainConfig,
-  minterContract,
-  providerContract,
+  createBlockchainClient,
+  getTokenDecimals,
 } from "./client.ts";
 
-export type TokenAdjustmentType =
+import type {
+  BlockchainClientConfig,
+} from "./client.ts";
+
+import {
+  BURNER_ROLE,
+  MINTER_ROLE,
+} from "./roles.ts";
+
+/*
+ * ==========================================================
+ * CONFIGURATION
+ * ==========================================================
+ */
+const MIN_GAS_BALANCE =
+  parseEther("0.0001");
+
+/*
+ * ==========================================================
+ * TYPES
+ * ==========================================================
+ */
+export type GoldTokenAdjustmentType =
   | "minting"
   | "burning";
 
-export type TokenAdjustmentResult = {
+export type BlockchainAdjustmentResult = {
   tx_hash: string;
-  block_number: number;
   status: "confirmed";
+  block_number: number;
 };
 
-function parseTokenAmount(
+type BlockchainClient =
+  ReturnType<
+    typeof createBlockchainClient
+  >;
+
+/*
+ * ==========================================================
+ * VALIDATE ADJUSTMENT AMOUNT
+ * ==========================================================
+ */
+function validateAmount(
   amount: string,
-  decimals: number,
-): bigint {
+): string {
   const normalizedAmount =
     amount.trim();
 
@@ -35,11 +70,31 @@ function parseTokenAmount(
     );
   }
 
+  return normalizedAmount;
+}
+
+/*
+ * ==========================================================
+ * PARSE TOKEN AMOUNT
+ * ==========================================================
+ */
+async function parseTokenAmount(
+  client: BlockchainClient,
+  amount: string,
+): Promise<bigint> {
+  const normalizedAmount =
+    validateAmount(amount);
+
+  const decimals =
+    await getTokenDecimals(
+      client.providerContract,
+    );
+
   let parsedAmount: bigint;
 
   try {
     parsedAmount =
-      ethers.parseUnits(
+      parseUnits(
         normalizedAmount,
         decimals,
       );
@@ -58,13 +113,145 @@ function parseTokenAmount(
   return parsedAmount;
 }
 
+/*
+ * ==========================================================
+ * VALIDATE LIVE BLOCKCHAIN NETWORK
+ * ==========================================================
+ *
+ * Ensures that the configured RPC endpoint is connected
+ * to the intended blockchain.
+ *
+ * Also checks that the token contract is deployed.
+ */
+async function validateBlockchainNetwork(
+  client: BlockchainClient,
+): Promise<void> {
+  const network =
+    await client.provider.getNetwork();
+
+  if (
+    network.chainId !==
+    BigInt(client.chainId)
+  ) {
+    throw new AppError(
+      "BLOCKCHAIN_CHAIN_ID_MISMATCH",
+    );
+  }
+
+  const contractCode =
+    await client.provider.getCode(
+      client.contractAddress,
+    );
+
+  if (
+    !contractCode ||
+    contractCode === "0x"
+  ) {
+    throw new AppError(
+      "TOKEN_CONTRACT_NOT_DEPLOYED",
+    );
+  }
+}
+
+/*
+ * ==========================================================
+ * VALIDATE TRANSACTION GAS
+ * ==========================================================
+ */
+async function validateTransactionGas(
+  client: BlockchainClient,
+): Promise<void> {
+  const signerAddress =
+    await client.treasurySigner.getAddress();
+
+  const gasBalance =
+    await client.provider.getBalance(
+      signerAddress,
+    );
+
+  if (
+    gasBalance <
+    MIN_GAS_BALANCE
+  ) {
+    throw new AppError(
+      "TOP_UP_GAS",
+    );
+  }
+}
+
+/*
+ * ==========================================================
+ * CHECK CONTRACT ROLE
+ * ==========================================================
+ */
+export async function checkRole(
+  client: BlockchainClient,
+  role: string,
+  address: string,
+): Promise<boolean> {
+  if (!isAddress(address)) {
+    throw new AppError(
+      "INVALID_BLOCKCHAIN_ADDRESS",
+    );
+  }
+
+  return await client.providerContract.hasRole(
+    role,
+    getAddress(address),
+  );
+}
+
+/*
+ * ==========================================================
+ * VALIDATE EXECUTION ROLE
+ * ==========================================================
+ *
+ * AccessControl checks msg.sender.
+ *
+ * Therefore the role must belong to the treasury signer
+ * executing the transaction.
+ */
+async function validateExecutionRole(
+  client: BlockchainClient,
+  adjustmentType:
+    GoldTokenAdjustmentType,
+): Promise<void> {
+  const signerAddress =
+    await client.treasurySigner.getAddress();
+
+  const requiredRole =
+    adjustmentType === "minting"
+      ? MINTER_ROLE
+      : BURNER_ROLE;
+
+  const hasRequiredRole =
+    await checkRole(
+      client,
+      requiredRole,
+      signerAddress,
+    );
+
+  if (!hasRequiredRole) {
+    throw new AppError(
+      adjustmentType === "minting"
+        ? "NO_MINTER_ROLE"
+        : "NO_BURNER_ROLE",
+    );
+  }
+}
+
+/*
+ * ==========================================================
+ * WAIT FOR TRANSACTION CONFIRMATION
+ * ==========================================================
+ */
 async function waitForTransaction(
   transaction:
-    ethers.ContractTransactionResponse,
-): Promise<TokenAdjustmentResult> {
+    ContractTransactionResponse,
+): Promise<BlockchainAdjustmentResult> {
   if (!transaction.hash) {
     throw new AppError(
-      "BLOCKCHAIN_TRANSACTION_FAILED",
+      "BLOCKCHAIN_TX_FAILED",
     );
   }
 
@@ -76,7 +263,7 @@ async function waitForTransaction(
     receipt.status !== 1
   ) {
     throw new AppError(
-      "BLOCKCHAIN_TRANSACTION_FAILED",
+      "BLOCKCHAIN_TX_FAILED",
     );
   }
 
@@ -84,91 +271,60 @@ async function waitForTransaction(
     tx_hash:
       transaction.hash,
 
-    block_number:
-      receipt.blockNumber,
-
     status:
       "confirmed",
+
+    block_number:
+      receipt.blockNumber,
   };
 }
 
-async function getTokenDecimals():
-  Promise<number> {
-  const rawDecimals =
-    await providerContract.decimals();
-
-  const decimals =
-    Number(rawDecimals);
-
-  if (
-    !Number.isSafeInteger(decimals) ||
-    decimals < 0
-  ) {
-    throw new AppError(
-      "INVALID_TOKEN_DECIMALS",
-    );
-  }
-
-  return decimals;
-}
-
-export async function checkContractRole(
-  role: string,
-  address: string,
-): Promise<boolean> {
-  if (!ethers.isAddress(address)) {
-    throw new AppError(
-      "INVALID_BLOCKCHAIN_ADDRESS",
-    );
-  }
-
-  return await providerContract.hasRole(
-    role,
-    ethers.getAddress(address),
-  );
-}
-
-async function getAdjustmentRole(
-  adjustmentType:
-    TokenAdjustmentType,
-): Promise<string> {
-  if (adjustmentType === "minting") {
-    return await providerContract
-      .MINTER_ROLE();
-  }
-
-  return await providerContract
-    .BURNER_ROLE();
-}
-
+/*
+ * ==========================================================
+ * MINT GOLD TOKENS
+ * ==========================================================
+ */
 export async function mintGoldTokens(
-  treasuryAddress: string,
+  client: BlockchainClient,
+  to: string,
   amount: string,
-): Promise<TokenAdjustmentResult> {
-  if (
-    !ethers.isAddress(
-      treasuryAddress,
-    )
-  ) {
+): Promise<BlockchainAdjustmentResult> {
+  if (!isAddress(to)) {
     throw new AppError(
-      "INVALID_TREASURY_ADDRESS",
+      "INVALID_MINT_RECEIVER_ADDRESS",
     );
   }
 
-  const decimals =
-    await getTokenDecimals();
+  /*
+   * Validate signer permissions.
+   */
+  await validateExecutionRole(
+    client,
+    "minting",
+  );
 
+  /*
+   * Validate gas balance.
+   */
+  await validateTransactionGas(
+    client,
+  );
+
+  /*
+   * Convert amount to token units.
+   */
   const parsedAmount =
-    parseTokenAmount(
+    await parseTokenAmount(
+      client,
       amount,
-      decimals,
     );
 
+  /*
+   * Execute mint.
+   */
   const transaction =
-    await minterContract.mint(
-      ethers.getAddress(
-        treasuryAddress,
-      ),
+    await client.treasuryContract.mint(
+      getAddress(to),
       parsedAmount,
     );
 
@@ -177,36 +333,49 @@ export async function mintGoldTokens(
   );
 }
 
-export async function burnGoldTokens(
-  treasuryAddress: string,
+/*
+ * ==========================================================
+ * BURN GOLD TOKENS
+ * ==========================================================
+ */
+export async function burnTokensFromTreasury(
+  client: BlockchainClient,
   amount: string,
-): Promise<TokenAdjustmentResult> {
-  if (
-    !ethers.isAddress(
-      treasuryAddress,
-    )
-  ) {
-    throw new AppError(
-      "INVALID_TREASURY_ADDRESS",
-    );
-  }
+): Promise<BlockchainAdjustmentResult> {
+  /*
+   * Validate signer permissions.
+   */
+  await validateExecutionRole(
+    client,
+    "burning",
+  );
 
-  const decimals =
-    await getTokenDecimals();
+  /*
+   * Validate gas balance.
+   */
+  await validateTransactionGas(
+    client,
+  );
 
+  /*
+   * Convert amount to token units.
+   */
   const parsedAmount =
-    parseTokenAmount(
+    await parseTokenAmount(
+      client,
       amount,
-      decimals,
     );
 
-  const treasuryBalanceRaw =
-    await providerContract.balanceOf(
-      treasuryAddress,
+  /*
+   * Validate treasury token balance.
+   */
+  const treasuryBalance =
+    await client.providerContract.balanceOf(
+      client.treasuryAddress,
     );
 
   if (
-    BigInt(treasuryBalanceRaw) <
+    BigInt(treasuryBalance) <
     parsedAmount
   ) {
     throw new AppError(
@@ -214,11 +383,12 @@ export async function burnGoldTokens(
     );
   }
 
+  /*
+   * Execute burn.
+   */
   const transaction =
-    await minterContract.burn(
-      ethers.getAddress(
-        treasuryAddress,
-      ),
+    await client.treasuryContract.burn(
+      client.treasuryAddress,
       parsedAmount,
     );
 
@@ -227,25 +397,31 @@ export async function burnGoldTokens(
   );
 }
 
+/*
+ * ==========================================================
+ * EXECUTE GOLD TOKEN ADJUSTMENT
+ * ==========================================================
+ *
+ * The blockchain configuration must be supplied from
+ * prepare_my_token_adjustment_execution.
+ */
 export async function executeGoldTokenAdjustment(
   input: {
     adjustment_type:
-      TokenAdjustmentType;
-
-    treasury_address?: string;
+      GoldTokenAdjustmentType;
 
     amount: string;
-  },
-): Promise<TokenAdjustmentResult> {
-  const treasuryAddress =
-    input.treasury_address ??
-    blockchainConfig.treasuryAddress;
 
+    blockchain:
+      BlockchainClientConfig;
+  },
+): Promise<BlockchainAdjustmentResult> {
+  /*
+   * Validate adjustment type.
+   */
   if (
-    input.adjustment_type !==
-      "minting" &&
-    input.adjustment_type !==
-      "burning"
+    input.adjustment_type !== "minting" &&
+    input.adjustment_type !== "burning"
   ) {
     throw new AppError(
       "INVALID_TOKEN_ADJUSTMENT_TYPE",
@@ -253,41 +429,39 @@ export async function executeGoldTokenAdjustment(
   }
 
   /*
-   * Preserve the existing contract-role model: the treasury
-   * address must have the applicable role.
+   * Create client for the selected blockchain.
    */
-  const requiredRole =
-    await getAdjustmentRole(
-      input.adjustment_type,
+  const client =
+    createBlockchainClient(
+      input.blockchain,
     );
 
-  const hasRequiredRole =
-    await checkContractRole(
-      requiredRole,
-      treasuryAddress,
-    );
+  /*
+   * Validate live blockchain connection.
+   */
+  await validateBlockchainNetwork(
+    client,
+  );
 
-  if (!hasRequiredRole) {
-    throw new AppError(
-      input.adjustment_type ===
-        "minting"
-        ? "NO_MINTER_ROLE"
-        : "NO_BURNER_ROLE",
-    );
-  }
-
+  /*
+   * Execute minting.
+   */
   if (
     input.adjustment_type ===
     "minting"
   ) {
     return await mintGoldTokens(
-      treasuryAddress,
+      client,
+      client.treasuryAddress,
       input.amount,
     );
   }
 
-  return await burnGoldTokens(
-    treasuryAddress,
+  /*
+   * Execute burning.
+   */
+  return await burnTokensFromTreasury(
+    client,
     input.amount,
   );
 }

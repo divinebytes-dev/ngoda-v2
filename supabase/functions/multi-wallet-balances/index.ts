@@ -34,12 +34,9 @@ Deno.serve(async (request: Request) => {
         "Multi-wallet balances RPC failed",
         {
           code: balancesError.code,
-          message:
-            balancesError.message,
-          details:
-            balancesError.details,
-          hint:
-            balancesError.hint,
+          message: balancesError.message,
+          details: balancesError.details,
+          hint: balancesError.hint,
         },
       );
 
@@ -51,18 +48,19 @@ Deno.serve(async (request: Request) => {
 
     return successResponse(
       balances ?? {
-        merchantWallet: {
-          wallet_balances: [],
-          total_usd_value: "0",
-        },
-
-        customerWallet: {
-          wallet_balances: [],
-          total_usd_value: "0",
-        },
-
         agentWallet: {
-          wallet_balances: [],
+          balances: {},
+          blockchain_balances: [],
+          total_usd_value: "0",
+        },
+        customerWallet: {
+          balances: {},
+          blockchain_balances: [],
+          total_usd_value: "0",
+        },
+        merchantWallet: {
+          balances: {},
+          blockchain_balances: [],
           total_usd_value: "0",
         },
       },

@@ -254,7 +254,9 @@ class _BalanceSheetCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(radius.borderRadius),
-        border: Border.all(color: colorScheme.outlineVariant),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+        ),
       ),
       child: Column(
         children: [
@@ -311,8 +313,8 @@ class DynamicMetricCard extends StatelessWidget {
       padding: EdgeInsets.all(spacing.md),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(radius.borderRadius),
-        border: Border.all(color: color.withValues(alpha: 0.20)),
+        borderRadius: BorderRadius.circular(radius.cardRadius),
+        border: Border.all(color: color.withValues(alpha: 0.09)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

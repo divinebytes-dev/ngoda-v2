@@ -1,3 +1,4 @@
+import 'package:ngoda/data_models/common/report_pagination.dart';
 import 'package:ngoda/data_models/loan/loan_balances.dart';
 import 'package:ngoda/data_models/loan/loan_entry.dart';
 import 'package:ngoda/data_models/loan/loan_totals.dart';
@@ -7,10 +8,11 @@ class LoanDetails {
     required List<LoanEntry> entries,
     required this.totals,
     required this.balances,
+    required this.pagination,
   }) : entries = List.unmodifiable(entries);
 
   final List<LoanEntry> entries;
-
+  final ReportPagination pagination;
   final LoanTotals totals;
   final LoanBalances balances;
 
@@ -19,6 +21,7 @@ class LoanDetails {
       entries: _parseEntries(json['entries']),
       totals: LoanTotals.fromJson(_asMap(json['totals'])),
       balances: LoanBalances.fromJson(_asMap(json['balances'])),
+      pagination: ReportPagination.fromJson(json['pagination']),
     );
   }
 

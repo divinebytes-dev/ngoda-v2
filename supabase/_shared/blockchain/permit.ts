@@ -1,3 +1,4 @@
+
 import {
   getAddress,
   isAddress,
@@ -6,16 +7,14 @@ import {
   Wallet,
 } from "ethers";
 
-import {
-  AppError,
-} from "../app-error.ts";
+import { AppError } from "../app-error.ts";
 
 import {
-  blockchainConfig,
+  createPermitDomain,
   getTokenDecimals,
-  permitDomain,
   permitTypes,
-  providerContract,
+  type BlockchainClientConfig,
+  createBlockchainClient,
 } from "./client.ts";
 
 import {
@@ -23,51 +22,45 @@ import {
   getWalletMnemonic,
 } from "./wallet.ts";
 
+export type BlockchainClient = ReturnType<
+  typeof createBlockchainClient
+>;
 
 export type SignedTokenTransfer = {
   owner: string;
   to: string;
-
   amount: string;
   fee: string;
-
   parsedAmount: bigint;
   parsedFee: bigint;
-
   nonce: bigint;
   deadline: bigint;
-
   v: number;
   r: string;
   s: string;
 };
-
 
 export function buildPermitValue({
   owner,
   amount,
   nonce,
   deadline,
+  contractAddress,
 }: {
   owner: string;
   amount: bigint;
   nonce: bigint;
   deadline: bigint;
+  contractAddress: string;
 }) {
   return {
     owner,
-
-    spender:
-      blockchainConfig.contractAddress,
-
-    value:
-      amount,
-
+    spender: contractAddress,
+    value: amount,
     nonce,
     deadline,
   };
 }
-
 
 export async function signTransfer({
   fromIndex,
@@ -75,187 +68,138 @@ export async function signTransfer({
   to,
   amount,
   fee,
+  client,
+  blockchain,
 }: {
   fromIndex: number;
   expectedOwner: string;
   to: string;
   amount: string;
   fee: string;
+  client: BlockchainClient;
+  blockchain: BlockchainClientConfig;
 }): Promise<SignedTokenTransfer> {
   if (
-    !Number.isSafeInteger(
-      fromIndex,
-    ) ||
+    !Number.isSafeInteger(fromIndex) ||
     fromIndex < 0
   ) {
-    throw new AppError(
-      "INVALID_WALLET_INDEX",
-    );
+    throw new AppError("INVALID_WALLET_INDEX");
   }
 
-  if (
-    !isAddress(
-      expectedOwner,
-    )
-  ) {
-    throw new AppError(
-      "INVALID_OWNER_ADDRESS",
-    );
+  if (!isAddress(expectedOwner)) {
+    throw new AppError("INVALID_OWNER_ADDRESS");
   }
 
   if (!isAddress(to)) {
+    throw new AppError("INVALID_RECEIVER_ADDRESS");
+  }
+
+  if (
+    client.blockchainCode !== blockchain.code ||
+    client.chainId !== blockchain.chain_id ||
+    client.contractAddress !==
+      getAddress(blockchain.contract_address)
+  ) {
     throw new AppError(
-      "INVALID_RECEIVER_ADDRESS",
+      "BLOCKCHAIN_CLIENT_CONFIG_MISMATCH",
     );
   }
 
-  const normalizedOwner =
-    getAddress(
-      expectedOwner,
-    );
+  const normalizedOwner = getAddress(expectedOwner);
+  const normalizedReceiver = getAddress(to);
 
-  const normalizedReceiver =
-    getAddress(to);
+  const mnemonic = getWalletMnemonic();
 
-  const mnemonic =
-    getWalletMnemonic();
+  const derivedWallet = deriveWallet(
+    mnemonic,
+    fromIndex,
+  );
 
-  const derivedWallet =
-    deriveWallet(
-      mnemonic,
-      fromIndex,
-    );
+  const derivedAddress = getAddress(
+    derivedWallet.address,
+  );
 
-  const derivedAddress =
-    getAddress(
-      derivedWallet.address,
-    );
-
-  /*
-   * Prevent signing from a derived wallet index that does
-   * not belong to the expected database wallet address.
-   */
-  if (
-    derivedAddress !==
-    normalizedOwner
-  ) {
+  if (derivedAddress !== normalizedOwner) {
     throw new AppError(
       "DERIVED_WALLET_OWNER_MISMATCH",
     );
   }
 
-  const tokenDecimals =
-    await getTokenDecimals();
+  const tokenDecimals = await getTokenDecimals(
+    client.providerContract,
+  );
 
   let parsedAmount: bigint;
   let parsedFee: bigint;
 
   try {
-    parsedAmount =
-      parseUnits(
-        amount,
-        tokenDecimals,
-      );
-
-    parsedFee =
-      parseUnits(
-        fee,
-        tokenDecimals,
-      );
-  } catch {
-    throw new AppError(
-      "INVALID_TOKEN_AMOUNT",
+    parsedAmount = parseUnits(
+      amount,
+      tokenDecimals,
     );
+
+    parsedFee = parseUnits(
+      fee,
+      tokenDecimals,
+    );
+  } catch {
+    throw new AppError("INVALID_TOKEN_AMOUNT");
   }
 
   if (parsedAmount <= 0n) {
-    throw new AppError(
-      "INVALID_TRANSFER_AMOUNT",
-    );
+    throw new AppError("INVALID_TRANSFER_AMOUNT");
   }
 
   if (parsedFee < 0n) {
-    throw new AppError(
-      "INVALID_TRANSFER_FEE",
-    );
+    throw new AppError("INVALID_TRANSFER_FEE");
   }
 
-  const total =
-    parsedAmount +
-    parsedFee;
+  const total = parsedAmount + parsedFee;
 
   const nonceRaw =
-    await providerContract.nonces(
+    await client.providerContract.nonces(
       derivedAddress,
     );
 
-  const nonce =
-    BigInt(
-      nonceRaw.toString(),
-    );
+  const nonce = BigInt(nonceRaw.toString());
 
-  const deadline =
-    BigInt(
-      Math.floor(
-        Date.now() / 1000,
-      ) + 600,
-    );
+  const deadline = BigInt(
+    Math.floor(Date.now() / 1000) + 600,
+  );
 
-  const permitValue =
-    buildPermitValue({
-      owner:
-        derivedAddress,
-
-      amount:
-        total,
-
-      nonce,
-      deadline,
-    });
-
-  const wallet =
-    new Wallet(
-      derivedWallet.privateKey,
-    );
-
-  const signature =
-    await wallet.signTypedData(
-      permitDomain,
-      permitTypes,
-      permitValue,
-    );
-
-  const parsedSignature =
-    Signature.from(
-      signature,
-    );
-
-  return {
-    owner:
-      derivedAddress,
-
-    to:
-      normalizedReceiver,
-
-    amount:
-      amount,
-
-    fee:
-      fee,
-
-    parsedAmount,
-    parsedFee,
-
+  const permitValue = buildPermitValue({
+    owner: derivedAddress,
+    amount: total,
     nonce,
     deadline,
+    contractAddress: client.contractAddress,
+  });
 
-    v:
-      parsedSignature.v,
+  const wallet = new Wallet(
+    derivedWallet.privateKey,
+  );
 
-    r:
-      parsedSignature.r,
+  const signature = await wallet.signTypedData(
+    createPermitDomain(blockchain),
+    permitTypes,
+    permitValue,
+  );
 
-    s:
-      parsedSignature.s,
+  const parsedSignature = Signature.from(
+    signature,
+  );
+
+  return {
+    owner: derivedAddress,
+    to: normalizedReceiver,
+    amount,
+    fee,
+    parsedAmount,
+    parsedFee,
+    nonce,
+    deadline,
+    v: parsedSignature.v,
+    r: parsedSignature.r,
+    s: parsedSignature.s,
   };
 }

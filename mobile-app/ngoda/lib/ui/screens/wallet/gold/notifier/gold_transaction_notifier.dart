@@ -336,8 +336,13 @@ class GoldTransactionNotifier extends Notifier<GoldTransactionState> {
     );
   }
 
-  Future<void> goldBuy() async {
+  Future<void> goldBuy({required String blockchainCode}) async {
     final reference = _requiredReference();
+    final code = blockchainCode.trim().toLowerCase();
+
+    if (code.isEmpty) {
+      throw StateError('Please select a blockchain.');
+    }
 
     if (!state.isValid || state.amount <= 0) {
       throw StateError('Invalid gold buy transaction.');
@@ -350,11 +355,11 @@ class GoldTransactionNotifier extends Notifier<GoldTransactionState> {
     final parameters = <String, String>{
       'currency': state.currency,
       'amount': state.amount.toString(),
+      'blockchain_code': code,
     };
 
     try {
       final user = getCurrentUser();
-
       final userId = user.userId;
 
       if (userId == null || userId.trim().isEmpty) {
@@ -381,6 +386,7 @@ class GoldTransactionNotifier extends Notifier<GoldTransactionState> {
       await performanceService.trace('gold_buy', () async {
         loyaltyResult = await service.goldBuy(
           transactionData: signedTransaction.transactionData,
+          blockchainCode: code,
         );
       });
 
@@ -406,8 +412,13 @@ class GoldTransactionNotifier extends Notifier<GoldTransactionState> {
     }
   }
 
-  Future<void> goldSell() async {
+  Future<void> goldSell({required String blockchainCode}) async {
     final reference = _requiredReference();
+    final code = blockchainCode.trim().toLowerCase();
+
+    if (code.isEmpty) {
+      throw StateError('Blockchain is required for Gold Sell.');
+    }
 
     if (!state.isValid || state.amount <= 0) {
       throw StateError('Invalid gold sell transaction.');
@@ -420,11 +431,11 @@ class GoldTransactionNotifier extends Notifier<GoldTransactionState> {
     final parameters = <String, String>{
       'currency': state.currency,
       'amount': state.amount.toString(),
+      'blockchain_code': code,
     };
 
     try {
       final user = getCurrentUser();
-
       final userId = user.userId;
 
       if (userId == null || userId.trim().isEmpty) {
@@ -449,6 +460,7 @@ class GoldTransactionNotifier extends Notifier<GoldTransactionState> {
       await performanceService.trace('gold_sell', () async {
         await service.goldSell(
           transactionData: signedTransaction.transactionData,
+          blockchainCode: code,
         );
       });
 
@@ -470,7 +482,13 @@ class GoldTransactionNotifier extends Notifier<GoldTransactionState> {
     }
   }
 
-  Future<void> goldTransfer() async {
+  Future<void> goldTransfer({required String blockchainCode}) async {
+    final code = blockchainCode.trim().toLowerCase();
+
+    if (code.isEmpty) {
+      throw StateError('BLOCKCHAIN_CODE_REQUIRED');
+    }
+
     final reference = _requiredReference();
 
     if (!state.isValid ||
@@ -486,6 +504,7 @@ class GoldTransactionNotifier extends Notifier<GoldTransactionState> {
     final parameters = <String, String>{
       'currency': state.currency,
       'amount': state.amount.toString(),
+      'blockchain_code': code,
     };
 
     try {
@@ -507,6 +526,7 @@ class GoldTransactionNotifier extends Notifier<GoldTransactionState> {
       await performanceService.trace('gold_transfer', () async {
         await service.goldTransfer(
           transactionData: signedTransaction.transactionData,
+          blockchainCode: code,
         );
       });
 

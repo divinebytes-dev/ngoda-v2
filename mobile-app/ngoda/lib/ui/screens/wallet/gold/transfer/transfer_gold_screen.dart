@@ -6,6 +6,7 @@ import 'package:ngoda/services/dialog_service.dart';
 import 'package:ngoda/services/number_format_service.dart';
 import 'package:ngoda/ui/enums/enums.dart';
 import 'package:ngoda/ui/extensions/app_size.dart';
+import 'package:ngoda/ui/extensions/theme_extension.dart';
 import 'package:ngoda/ui/functions/refresh_user_dashboard.dart';
 import 'package:ngoda/ui/screens/finance/providers/transactions_config_provider.dart';
 import 'package:ngoda/ui/screens/wallet/gold/provider/gold_transaction_provider.dart';
@@ -13,13 +14,14 @@ import 'package:ngoda/ui/screens/wallet/transactions/provider/customer_transacti
 import 'package:ngoda/ui/shared/app_colors.dart';
 import 'package:ngoda/ui/shared/app_text_styles.dart';
 import 'package:ngoda/ui/widgets/app_button.dart';
+import 'package:ngoda/ui/widgets/app_empty_state.dart';
 import 'package:ngoda/ui/widgets/app_error_state.dart';
 import 'package:ngoda/ui/widgets/app_loader.dart';
+import 'package:ngoda/ui/widgets/app_search_dropdown_field.dart';
 import 'package:ngoda/ui/widgets/app_value_row.dart';
 import 'package:ngoda/ui/widgets/input_field.dart';
 import 'package:ngoda/ui/widgets/payment_calculation_card.dart';
 import 'package:ngoda/ui/widgets/screen_header.dart';
-import 'package:ngoda/ui/extensions/theme_extension.dart';
 
 class TransferGoldScreen extends ConsumerStatefulWidget {
   const TransferGoldScreen({super.key});
@@ -32,6 +34,8 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
   late final TextEditingController _emailController;
   late final TextEditingController _amountController;
 
+  String? _blockchainCode;
+
   @override
   void initState() {
     super.initState();
@@ -40,9 +44,7 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
     _amountController = TextEditingController();
 
     Future.microtask(() {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       ref.read(goldTransactionProvider.notifier).initTransfer();
     });
@@ -52,16 +54,13 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
   void dispose() {
     _emailController.dispose();
     _amountController.dispose();
-
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final setupAsync = ref.watch(customerTransactionSetupProvider);
-
     final state = ref.watch(goldTransactionProvider);
-
     final notifier = ref.read(goldTransactionProvider.notifier);
 
     final spacing = context.spacing;
@@ -76,26 +75,42 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
               title: 'Transfer Gold',
               subtitle: 'Send gold securely',
             ),
-
             Expanded(
               child: setupAsync.when(
                 loading: () => const AppLoader(
-                  message: 'Loading gold balance',
+                  message: 'Loading gold balances',
                   fullScreen: false,
                 ),
-                error: (error, _) {
-                  return AppErrorState(
-                    title: 'Unable to transfer gold',
-                    message: error.toString(),
-                  );
-                },
+                error: (error, _) => AppErrorState(
+                  title: 'Unable to transfer gold',
+                  message: error.toString(),
+                ),
                 data: (setup) {
-                  /*
-                   * This is already the
-                   * CustomerTransactionSetup
-                   * snapshot.
-                   */
-                  final balance = setup.balances['gold'] ?? 0.0;
+                  final codes = setup.blockchains;
+
+                  if (codes.isEmpty) {
+                    return const AppEmptyState(
+                      message: 'No GOLD blockchain balances available',
+                    );
+                  }
+
+                  final selected = codes.contains(_blockchainCode)
+                      ? _blockchainCode
+                      : null;
+
+                  final balance = selected == null
+                      ? 0.0
+                      : setup.goldBalanceFor(selected) ?? 0.0;
+
+                  String blockchainLabel(String code) {
+                    final available = setup.goldBalanceFor(code) ?? 0.0;
+
+                    return '$code — '
+                        '${NumberFormatService.formatNumber(available, decimals: 6)} g';
+                  }
+
+                  final canTransfer =
+                      selected != null && state.isValid && !state.isLoading;
 
                   return GestureDetector(
                     behavior: HitTestBehavior.translucent,
@@ -131,8 +146,50 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
                                     context,
                                   ).copyWith(fontWeight: FontWeight.w600),
                                 ),
-
                                 SizedBox(height: spacing.lg),
+
+                                Text(
+                                  'Blockchain',
+                                  style: AppTextStyles.small(context),
+                                ),
+                                SizedBox(height: spacing.sm),
+
+                                AbsorbPointer(
+                                  absorbing: state.isLoading,
+                                  child: AppSearchDropdownField<String>(
+                                    selected: selected,
+                                    values: codes,
+                                    hint: 'Select blockchain',
+                                    displayText: blockchainLabel,
+                                    filter: (code, query) => code
+                                        .toLowerCase()
+                                        .contains(query.toLowerCase()),
+                                    onSelect: (code) {
+                                      if (state.isLoading) return;
+
+                                      setState(() {
+                                        _blockchainCode = code;
+                                      });
+
+                                      final selectedBalance =
+                                          setup.goldBalanceFor(code) ?? 0.0;
+
+                                      _updateAmount(
+                                        _amountController.text,
+                                        selectedBalance,
+                                      );
+                                    },
+                                    itemBuilder: (context, code) => Padding(
+                                      padding: EdgeInsets.all(spacing.md),
+                                      child: Text(
+                                        blockchainLabel(code),
+                                        style: AppTextStyles.small(context),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+
+                                SizedBox(height: spacing.md),
 
                                 InputField(
                                   controller: _emailController,
@@ -153,7 +210,7 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
                                   onChanged: (value) {
                                     _updateAmount(value, balance);
                                   },
-                                  maxLength: 4,
+                                  decimalPlaces: 3,
                                 ),
 
                                 SizedBox(height: spacing.sm),
@@ -172,7 +229,9 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
                                     ),
                                   ),
                                   child: AppValueRow(
-                                    label: 'Available Gold',
+                                    label: selected == null
+                                        ? 'Available Gold'
+                                        : 'Available Gold ($selected)',
                                     value: NumberFormatService.formatNumber(
                                       balance,
                                       decimals: 6,
@@ -184,9 +243,8 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
                                   ),
                                 ),
 
-                                if (state.amount > 0) ...[
+                                if (state.amount > 0 && selected != null) ...[
                                   SizedBox(height: spacing.md),
-
                                   _buildCalculation(),
                                 ],
                               ],
@@ -206,7 +264,6 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
                                       ? null
                                       : () {
                                           _emailController.clear();
-
                                           _amountController.clear();
 
                                           notifier.reset();
@@ -215,17 +272,15 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
                                         },
                                 ),
                               ),
-
                               SizedBox(width: spacing.md),
-
                               Expanded(
                                 child: AppButton(
                                   text: 'Transfer',
                                   isProcessing: state.isLoading,
-                                  isDisabled: !state.isValid || state.isLoading,
-                                  onPressed: !state.isValid || state.isLoading
-                                      ? null
-                                      : _handleTransfer,
+                                  isDisabled: !canTransfer,
+                                  onPressed: canTransfer
+                                      ? _handleTransfer
+                                      : null,
                                 ),
                               ),
                             ],
@@ -246,15 +301,11 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
   void _updateAmount(String value, double balance) {
     final configResponse = ref.read(transactionsConfigProvider).value;
 
-    if (configResponse == null) {
-      return;
-    }
+    if (configResponse == null) return;
 
     final feeConfig = configResponse.result?.get('gold_token_transfer', 'gold');
 
-    if (feeConfig == null) {
-      return;
-    }
+    if (feeConfig == null) return;
 
     ref
         .read(goldTransactionProvider.notifier)
@@ -268,7 +319,6 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
 
   Widget _buildCalculation() {
     final state = ref.watch(goldTransactionProvider);
-
     final result = state.result;
 
     if (result == null) {
@@ -283,20 +333,16 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
           value: NumberFormatService.formatNumber(state.amount, decimals: 6),
           addBottomSpacing: false,
         ),
-
         SizedBox(height: context.spacing.sm),
-
         AppValueRow(
           label: 'Fee',
           value: NumberFormatService.formatNumber(result.feeGold, decimals: 6),
           addBottomSpacing: false,
         ),
-
         Padding(
           padding: EdgeInsets.symmetric(vertical: context.spacing.sm),
           child: const Divider(),
         ),
-
         AppValueRow(
           label: 'Total',
           value: NumberFormatService.formatNumber(result.quantity, decimals: 6),
@@ -305,9 +351,7 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
           ).copyWith(fontWeight: FontWeight.w700),
           addBottomSpacing: false,
         ),
-
         SizedBox(height: context.spacing.sm),
-
         AppValueRow(
           label: 'New Gold Balance',
           value: NumberFormatService.formatNumber(state.remaining, decimals: 6),
@@ -322,41 +366,44 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
   }
 
   Future<void> _handleTransfer() async {
-    try {
-      final confirmed = await _confirmTransfer();
+    final blockchainCode = _blockchainCode;
 
-      if (confirmed != true) {
-        return;
-      }
+    if (blockchainCode == null) return;
+
+    try {
+      final confirmed = await _confirmTransfer(blockchainCode);
+
+      if (confirmed != true || !mounted) return;
 
       final notifier = ref.read(goldTransactionProvider.notifier);
 
-      await notifier.goldTransfer();
+      await notifier.goldTransfer(blockchainCode: blockchainCode);
 
       refreshUserDashboard(ref);
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
-      await _showReceipt();
+      await _showReceipt(blockchainCode);
+
+      if (!mounted) return;
 
       _emailController.clear();
       _amountController.clear();
 
+      setState(() {
+        _blockchainCode = null;
+      });
+
       notifier.reset();
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       await DialogService.error(context, message: error.toString());
     }
   }
 
-  Future<bool?> _confirmTransfer() {
+  Future<bool?> _confirmTransfer(String blockchainCode) {
     final state = ref.read(goldTransactionProvider);
-
     final result = state.result;
 
     if (result == null) {
@@ -367,6 +414,7 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
       context,
       title: 'Confirm Gold Transfer',
       rows: [
+        PaymentRow('Blockchain', blockchainCode),
         PaymentRow('Recipient', state.email),
         PaymentRow(
           'Amount',
@@ -385,19 +433,17 @@ class _TransferGoldScreenState extends ConsumerState<TransferGoldScreen> {
     );
   }
 
-  Future<void> _showReceipt() async {
+  Future<void> _showReceipt(String blockchainCode) async {
     final state = ref.read(goldTransactionProvider);
-
     final result = state.result;
 
-    if (result == null) {
-      return;
-    }
+    if (result == null) return;
 
     await DialogService.paymentReceipt(
       context,
       title: 'Gold Transfer Successful',
       rows: [
+        PaymentRow('Blockchain', blockchainCode),
         PaymentRow('Recipient', state.email),
         PaymentRow(
           'Amount',

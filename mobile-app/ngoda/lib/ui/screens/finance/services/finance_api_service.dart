@@ -89,16 +89,17 @@ class FinanceApiService {
   Future<FinanceTransactionSummary> getRecentTransactions(
     FinancialStatementParams params,
   ) async {
+    final currency = params.currency?.trim().toLowerCase();
+
     final data = await _functions.invokeData(
       functionName: 'recent-transactions',
       method: HttpMethod.get,
-      body: {
-        'asOfDate': params.endDate,
+      queryParameters: {
+        'startDate': params.startDate,
         'endDate': params.endDate,
         'page': params.page,
         'pageSize': params.pageSize,
-        if (params.currency != null && params.currency!.isNotEmpty)
-          'currency': params.currency,
+        if (currency != null && currency.isNotEmpty) 'currency': currency,
       },
     );
 

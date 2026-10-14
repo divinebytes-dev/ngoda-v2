@@ -224,7 +224,7 @@ class _DrilldownContent extends StatelessWidget {
                         }
 
                         context.push(
-                          '/profile/recent-transactions/'
+                          '/recent-transactions/'
                           '${entry.documentNumber}',
                         );
                       },
@@ -234,23 +234,16 @@ class _DrilldownContent extends StatelessWidget {
             ],
           ),
         ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(spacing.sm, 0, spacing.sm, spacing.xs),
-            child: AppPagination(
-              page: drilldown.pagination.page,
-              totalPages: drilldown.pagination.totalPages,
-              totalEntries: drilldown.pagination.totalEntries,
-              hasPrevious: drilldown.pagination.hasPrevious,
-              hasNext: drilldown.pagination.hasNext,
-              onPrevious: onPrevious,
-              onNext: onNext,
-              pageSize: pageSize,
-              onPageSizeChanged: onPageSizeChanged,
-              entryLabel: 'entries',
-            ),
-          ),
+        AppPagination(
+          page: drilldown.pagination.page,
+          totalPages: drilldown.pagination.totalPages,
+          totalEntries: drilldown.pagination.totalEntries,
+          hasPrevious: drilldown.pagination.hasPrevious,
+          hasNext: drilldown.pagination.hasNext,
+          onPrevious: onPrevious,
+          onNext: onNext,
+          pageSize: pageSize,
+          onPageSizeChanged: onPageSizeChanged,
         ),
       ],
     );

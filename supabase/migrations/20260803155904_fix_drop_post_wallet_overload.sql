@@ -1,0 +1,20 @@
+drop function public.post_wallet_entries(
+    integer,
+    integer,
+    text,
+    text,
+    text,
+    public."TransactionType",
+    numeric,
+    numeric,
+    public."WalletOwnerType",
+    public."WalletOwnerType",
+    text,
+    text,
+    public."AuditActionType",
+    text,
+    numeric,
+    text,
+    public.notification_message,
+    public.notification_message
+);

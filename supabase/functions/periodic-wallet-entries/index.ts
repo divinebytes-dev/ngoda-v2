@@ -1,3 +1,4 @@
+
 import {
   errorResponse,
   successResponse,
@@ -24,6 +25,9 @@ type WalletPeriodEntriesRequest = {
 
   wallet_owner?: WalletOwnerType;
   walletOwner?: WalletOwnerType;
+
+  blockchain_code?: string | null;
+  blockchainCode?: string | null;
 
   fiscal_year?: number;
   fiscalYear?: number;
@@ -68,13 +72,16 @@ Deno.serve(async (request: Request) => {
       );
     }
 
+    /*
+     * Currency.
+     */
+    const rawCurrency =
+      body.currency_code ?? body.currency;
+
     const currencyCode =
-      (
-        body.currency_code ??
-        body.currency
-      )
-        ?.trim()
-        .toLowerCase();
+      typeof rawCurrency === "string"
+        ? rawCurrency.trim().toLowerCase()
+        : null;
 
     if (!currencyCode) {
       throw new AppError(
@@ -82,9 +89,11 @@ Deno.serve(async (request: Request) => {
       );
     }
 
+    /*
+     * Wallet owner.
+     */
     const walletOwner =
-      body.wallet_owner ??
-      body.walletOwner;
+      body.wallet_owner ?? body.walletOwner;
 
     if (!walletOwner) {
       throw new AppError(
@@ -92,30 +101,69 @@ Deno.serve(async (request: Request) => {
       );
     }
 
-    if (
-      !walletOwnerTypes.includes(
-        walletOwner,
-      )
-    ) {
+    if (!walletOwnerTypes.includes(walletOwner)) {
       throw new AppError(
         "INVALID_WALLET_OWNER",
       );
     }
 
-    const fiscalYear =
-      Number(
-        body.fiscal_year ??
-          body.fiscalYear,
-      );
+    /*
+     * Blockchain.
+     */
+    const rawBlockchain =
+      body.blockchain_code ?? body.blockchainCode;
 
-    if (!Number.isInteger(fiscalYear)) {
+    const blockchainCode =
+      typeof rawBlockchain === "string"
+        ? rawBlockchain.trim().toLowerCase() || null
+        : null;
+
+    if (
+      currencyCode === "gold" &&
+      blockchainCode === null
+    ) {
+      throw new AppError(
+        "BLOCKCHAIN_CODE_IS_REQUIRED",
+      );
+    }
+
+    /*
+     * Fiscal year.
+     */
+    const fiscalYearValue =
+      body.fiscal_year ?? body.fiscalYear;
+
+    if (
+      fiscalYearValue === undefined ||
+      fiscalYearValue === null
+    ) {
       throw new AppError(
         "INVALID_FISCAL_YEAR",
       );
     }
 
-    const period =
-      Number(body.period);
+    const fiscalYear = Number(fiscalYearValue);
+
+    if (
+      !Number.isInteger(fiscalYear) ||
+      fiscalYear < 1
+    ) {
+      throw new AppError(
+        "INVALID_FISCAL_YEAR",
+      );
+    }
+
+    /*
+     * Period.
+     */
+    if (body.period === undefined ||
+        body.period === null) {
+      throw new AppError(
+        "INVALID_PERIOD",
+      );
+    }
+
+    const period = Number(body.period);
 
     if (
       !Number.isInteger(period) ||
@@ -127,8 +175,10 @@ Deno.serve(async (request: Request) => {
       );
     }
 
-    const page =
-      Number(body.page ?? 1);
+    /*
+     * Pagination.
+     */
+    const page = Number(body.page ?? 1);
 
     if (
       !Number.isInteger(page) ||
@@ -139,12 +189,9 @@ Deno.serve(async (request: Request) => {
       );
     }
 
-    const pageSize =
-      Number(
-        body.page_size ??
-          body.pageSize ??
-          50,
-      );
+    const pageSize = Number(
+      body.page_size ?? body.pageSize ?? 50,
+    );
 
     if (
       !Number.isInteger(pageSize) ||
@@ -156,29 +203,22 @@ Deno.serve(async (request: Request) => {
       );
     }
 
+    /*
+     * Fetch wallet entries.
+     */
     const {
       data: result,
       error: resultError,
     } = await authSupabase.rpc(
       "get_my_wallet_period_entries",
       {
-        p_currency_code:
-          currencyCode,
-
-        p_wallet_owner:
-          walletOwner,
-
-        p_fiscal_year:
-          fiscalYear,
-
-        p_period:
-          period,
-
-        p_page:
-          page,
-
-        p_page_size:
-          pageSize,
+        p_currency_code: currencyCode,
+        p_wallet_owner: walletOwner,
+        p_fiscal_year: fiscalYear,
+        p_period: period,
+        p_page: page,
+        p_page_size: pageSize,
+        p_blockchain_code: blockchainCode,
       },
     );
 
@@ -187,12 +227,9 @@ Deno.serve(async (request: Request) => {
         "Wallet period entries RPC failed",
         {
           code: resultError.code,
-          message:
-            resultError.message,
-          details:
-            resultError.details,
-          hint:
-            resultError.hint,
+          message: resultError.message,
+          details: resultError.details,
+          hint: resultError.hint,
         },
       );
 
@@ -202,9 +239,7 @@ Deno.serve(async (request: Request) => {
       );
     }
 
-    return successResponse(
-      result,
-    );
+    return successResponse(result);
   } catch (error) {
     console.error(
       "WALLET_PERIOD_ENTRIES_ERROR",

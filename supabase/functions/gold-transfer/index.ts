@@ -39,17 +39,20 @@ import {
 } from "../../_shared/blockchain/permit.ts";
 
 import {
-  relayTransferWithPermit,
+  relayTrackedTransferWithPermit,
 } from "../../_shared/blockchain/transfer.ts";
 
 import {
-  blockchainConfig,
+  createBlockchainClient,
 } from "../../_shared/blockchain/client.ts";
+
+import type {
+  SupportedBlockchainConfig,
+} from "../../_shared/types/supported_blockchain_config.ts";
 
 import {
   recordFinancialActivity,
 } from "../../_shared/financial-intelligence/record-financial-activity.ts";
-
 
 type RpcError = {
   code?: string;
@@ -58,12 +61,10 @@ type RpcError = {
   hint?: string | null;
 };
 
-
 type RpcResult = {
   data: unknown;
   error: RpcError | null;
 };
-
 
 type RpcClient = {
   rpc: (
@@ -72,11 +73,7 @@ type RpcClient = {
   ) => Promise<RpcResult>;
 };
 
-
-type NumericValue =
-  | string
-  | number;
-
+type NumericValue = string | number;
 
 type GoldTransferContext = {
   sender_id: string;
@@ -86,65 +83,61 @@ type GoldTransferContext = {
   version_time: NumericValue;
 };
 
-
 type GoldTransferPreparation = {
   sender_id: string;
   sender_wallet_address: string;
   sender_wallet_index: NumericValue;
-
   receiver_id: string;
   receiver_wallet_address: string;
-
   treasury_id: string;
   treasury_wallet_address: string;
-
   country_code: string;
+  blockchain_code: string;
   fiscal_year: number;
   period: number;
   document_prefix: string;
-
   amount: NumericValue;
   fee: NumericValue;
   total_amount: NumericValue;
 };
 
-
 type GoldTransferCompletion = {
   success: boolean;
-
   document_number: string;
   amount: string;
   fee: string;
   explorer_url: string;
-
-  receiver_notification_id:
-    | string
-    | null;
-
-  device_tokens:
-    | string[]
-    | null;
-
-  push_title:
-    | string
-    | null;
-
-  push_body:
-    | string
-    | null;
-
-  push_reference:
-    | string
-    | null;
+  receiver_notification_id: string | null;
+  device_tokens: string[] | null;
+  push_title: string | null;
+  push_body: string | null;
+  push_reference: string | null;
 };
 
+type BlockchainRpcRow = {
+  code: string;
+  chain_id: NumericValue;
+  rpc_url: string;
+  contract_address: string;
+  native_currency_code: string;
+  explorer_url: string;
+};
+
+type BlockchainConfig =
+  SupportedBlockchainConfig & {
+    explorer_url: string;
+  };
+
+type TransferRequest = {
+  transaction?: TransactionData;
+  blockchain_code?: string;
+};
 
 function asRpcClient(
   client: unknown,
 ): RpcClient {
   return client as RpcClient;
 }
-
 
 function firstRow<T>(
   data: unknown,
@@ -165,7 +158,6 @@ function firstRow<T>(
   return null;
 }
 
-
 function scalarValue(
   data: unknown,
 ): string | null {
@@ -180,8 +172,7 @@ function scalarValue(
     Array.isArray(data) &&
     data.length > 0
   ) {
-    const first =
-      data[0];
+    const first = data[0];
 
     if (
       typeof first === "string" ||
@@ -191,14 +182,11 @@ function scalarValue(
     }
 
     if (
-      first !== null &&
+      first &&
       typeof first === "object"
     ) {
-      const values =
-        Object.values(first);
-
       const value =
-        values[0];
+        Object.values(first)[0];
 
       if (
         typeof value === "string" ||
@@ -212,59 +200,99 @@ function scalarValue(
   return null;
 }
 
-
 function normalizeAddress(
   address: string,
 ): string {
-  return address
-    .trim()
-    .toLowerCase();
+  return address.trim().toLowerCase();
 }
 
-
-function requiredEnvironment(
-  name: string,
+function validateBlockchainCode(
+  value: unknown,
 ): string {
-  const value =
-    Deno.env.get(name)?.trim();
-
-  if (!value) {
+  if (typeof value !== "string") {
     throw new AppError(
-      `ENV_${name}_MISSING`,
+      "BLOCKCHAIN_CODE_REQUIRED",
     );
   }
 
-  return value;
-}
+  const code =
+    value.trim().toLowerCase();
 
-
-function buildExplorerUrl(
-  transactionHash: string,
-): string {
-  const explorerPrefix =
-    requiredEnvironment(
-      "CHIADO_EXPLORER",
+  if (!code) {
+    throw new AppError(
+      "BLOCKCHAIN_CODE_REQUIRED",
     );
+  }
 
-  return (
-    `${explorerPrefix}${transactionHash}`
-  );
+  if (!/^[a-z0-9_-]+$/.test(code)) {
+    throw new AppError(
+      "INVALID_BLOCKCHAIN_CODE",
+    );
+  }
+
+  return code;
 }
 
+function validateChainId(
+  value: NumericValue,
+): number {
+  const chainId = Number(value);
+
+  if (
+    !Number.isSafeInteger(chainId) ||
+    chainId <= 0
+  ) {
+    throw new AppError(
+      "INVALID_BLOCKCHAIN_CHAIN_ID",
+    );
+  }
+
+  return chainId;
+}
+
+function validatePositiveAmount(
+  value: NumericValue,
+  errorMessage: string,
+): string {
+  const amount = String(value);
+  const parsed = Number(amount);
+
+  if (
+    !Number.isFinite(parsed) ||
+    parsed <= 0
+  ) {
+    throw new AppError(errorMessage);
+  }
+
+  return amount;
+}
+
+function validateNonNegativeAmount(
+  value: NumericValue,
+  errorMessage: string,
+): string {
+  const amount = String(value);
+  const parsed = Number(amount);
+
+  if (
+    !Number.isFinite(parsed) ||
+    parsed < 0
+  ) {
+    throw new AppError(errorMessage);
+  }
+
+  return amount;
+}
 
 function clientIpAddress(
   request: Request,
 ): string {
   const forwardedFor =
-    request.headers.get(
-      "x-forwarded-for",
-    );
+    request.headers.get("x-forwarded-for");
 
   if (forwardedFor) {
     const firstAddress =
-      forwardedFor
-        .split(",")[0]
-        ?.trim();
+      forwardedFor.split(",")[0]?.trim();
 
     if (firstAddress) {
       return firstAddress;
@@ -274,57 +302,80 @@ function clientIpAddress(
   return (
     request.headers
       .get("x-real-ip")
-      ?.trim() ??
-    "unknown"
+      ?.trim() ?? "unknown"
   );
 }
 
-
-function validatePositiveAmount(
-  value: NumericValue,
-  errorMessage: string,
+function buildExplorerUrl(
+  explorerUrl: string,
+  txHash: string,
 ): string {
-  const amount =
-    String(value);
+  const base = explorerUrl.trim();
 
-  const parsed =
-    Number(amount);
-
-  if (
-    !Number.isFinite(parsed) ||
-    parsed <= 0
-  ) {
+  if (!base) {
     throw new AppError(
-      errorMessage,
+      "BLOCKCHAIN_EXPLORER_URL_NOT_CONFIGURED",
     );
   }
 
-  return amount;
-}
-
-
-function validateNonNegativeAmount(
-  value: NumericValue,
-  errorMessage: string,
-): string {
-  const amount =
-    String(value);
-
-  const parsed =
-    Number(amount);
-
-  if (
-    !Number.isFinite(parsed) ||
-    parsed < 0
-  ) {
+  if (!/^https?:\/\//i.test(base)) {
     throw new AppError(
-      errorMessage,
+      "INVALID_BLOCKCHAIN_EXPLORER_URL",
     );
   }
 
-  return amount;
+  const url =
+    base.replace(/\/+$/, "");
+
+  return `${url}/tx/${txHash}`;
 }
 
+function logRpcError(
+  label: string,
+  error: RpcError,
+  context: Record<string, unknown> = {},
+): void {
+  console.error(label, {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+    ...context,
+  });
+}
+
+async function rpcRow<T>(
+  client: RpcClient,
+  functionName: string,
+  args: Record<string, unknown>,
+  errorMessage: string,
+): Promise<T> {
+  const { data, error } =
+    await client.rpc(
+      functionName,
+      args,
+    );
+
+  if (error) {
+    logRpcError(
+      errorMessage,
+      error,
+      { functionName },
+    );
+
+    throw new AppError(
+      error.message || errorMessage,
+    );
+  }
+
+  const row = firstRow<T>(data);
+
+  if (!row) {
+    throw new AppError(errorMessage);
+  }
+
+  return row;
+}
 
 async function updateFailedState(
   authRpc: RpcClient,
@@ -332,32 +383,24 @@ async function updateFailedState(
   failureMessage: string,
 ): Promise<boolean> {
   try {
-    const {
-      error,
-    } = await authRpc.rpc(
-      "update_my_transaction_state",
-      {
-        p_transaction_id:
-          transactionId,
-
-        p_status:
-          TransactionStatus.failed,
-
-        p_message:
-          failureMessage,
-      },
-    );
+    const { error } =
+      await authRpc.rpc(
+        "update_my_transaction_state",
+        {
+          p_transaction_id:
+            transactionId,
+          p_status:
+            TransactionStatus.failed,
+          p_message:
+            failureMessage,
+        },
+      );
 
     if (error) {
-      console.error(
+      logRpcError(
         "Gold-transfer state update failed",
-        {
-          transactionId,
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-        },
+        error,
+        { transactionId },
       );
 
       return false;
@@ -369,7 +412,6 @@ async function updateFailedState(
       "Gold-transfer state update failed",
       {
         transactionId,
-
         error:
           error instanceof Error
             ? error.message
@@ -381,63 +423,312 @@ async function updateFailedState(
   }
 }
 
+/*
+ * ==========================================================
+ * BLOCKCHAIN CONFIGURATION
+ * ==========================================================
+ *
+ * Uses the existing:
+ *
+ * public.fetch_active_supported_blockchain
+ *
+ * No direct database table access.
+ */
+async function fetchBlockchainConfig(
+  authRpc: RpcClient,
+  blockchainCode: string,
+): Promise<BlockchainConfig> {
+  const row =
+    await rpcRow<BlockchainRpcRow>(
+      authRpc,
+      "fetch_active_supported_blockchain",
+      {
+        p_blockchain_code:
+          blockchainCode,
+      },
+      "BLOCKCHAIN_CONFIG_FETCH_FAILED",
+    );
 
+  if (
+    row.code?.toLowerCase() !==
+    blockchainCode
+  ) {
+    throw new AppError(
+      "BLOCKCHAIN_CONFIG_CODE_MISMATCH",
+    );
+  }
+
+  if (
+    !row.rpc_url ||
+    !row.contract_address
+  ) {
+    throw new AppError(
+      "BLOCKCHAIN_CONFIG_INCOMPLETE",
+    );
+  }
+
+  if (!row.explorer_url?.trim()) {
+    throw new AppError(
+      "BLOCKCHAIN_EXPLORER_URL_NOT_CONFIGURED",
+    );
+  }
+
+  return {
+    code: blockchainCode,
+    chain_id:
+      validateChainId(row.chain_id),
+    rpc_url: row.rpc_url,
+    contract_address:
+      row.contract_address,
+    native_currency_code:
+      row.native_currency_code,
+    explorer_url:
+      row.explorer_url.trim(),
+  };
+}
+
+/*
+ * ==========================================================
+ * FINANCIAL INTELLIGENCE
+ * ==========================================================
+ */
+async function recordTransferFinancialActivities(
+  serviceSupabase:
+    ReturnType<
+      typeof createSupabaseServiceClient
+    >,
+  context: GoldTransferContext,
+  preparation: GoldTransferPreparation,
+  completion: GoldTransferCompletion,
+  totalAmount: string,
+  transactionId: string,
+): Promise<void> {
+  try {
+    const result =
+      await recordFinancialActivity(
+        serviceSupabase,
+        {
+          reference:
+            completion.document_number,
+          userId:
+            context.sender_id,
+          countryCode:
+            context.country_code,
+          currencyCode: "gold",
+          transactionType:
+            TransactionType
+              .gold_token_transfer,
+          activityType:
+            FinancialActivityType
+              .investment_transfer_out,
+          amount: totalAmount,
+          amountUsd: "0.000000",
+          cashAmount: "0.000000",
+          cashAmountUsd: "0.000000",
+          goldQuantity: totalAmount,
+          investmentCostUsd:
+            "0.000000",
+        },
+      );
+
+    if (result.status === "failed") {
+      console.error(
+        "GOLD_TRANSFER_SENDER_FINANCIAL_INTELLIGENCE_FAILED",
+        {
+          transactionId,
+          reference:
+            completion.document_number,
+          senderId:
+            context.sender_id,
+          totalGoldOut:
+            totalAmount,
+          error: result.error,
+        },
+      );
+    }
+  } catch (error) {
+    console.error(
+      "GOLD_TRANSFER_SENDER_FINANCIAL_INTELLIGENCE_EXCEPTION",
+      {
+        transactionId,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      },
+    );
+  }
+
+  try {
+    const result =
+      await recordFinancialActivity(
+        serviceSupabase,
+        {
+          reference:
+            completion.document_number,
+          userId:
+            preparation.receiver_id,
+          countryCode:
+            context.country_code,
+          currencyCode: "gold",
+          transactionType:
+            TransactionType
+              .gold_token_transfer,
+          activityType:
+            FinancialActivityType
+              .investment_transfer_in,
+          amount:
+            completion.amount,
+          amountUsd: "0.000000",
+          cashAmount: "0.000000",
+          cashAmountUsd: "0.000000",
+          goldQuantity:
+            completion.amount,
+          investmentCostUsd:
+            "0.000000",
+        },
+      );
+
+    if (result.status === "failed") {
+      console.error(
+        "GOLD_TRANSFER_RECEIVER_FINANCIAL_INTELLIGENCE_FAILED",
+        {
+          transactionId,
+          reference:
+            completion.document_number,
+          receiverId:
+            preparation.receiver_id,
+          goldQuantity:
+            completion.amount,
+          error: result.error,
+        },
+      );
+    }
+  } catch (error) {
+    console.error(
+      "GOLD_TRANSFER_RECEIVER_FINANCIAL_INTELLIGENCE_EXCEPTION",
+      {
+        transactionId,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      },
+    );
+  }
+}
+
+/*
+ * ==========================================================
+ * PUSH NOTIFICATION
+ * ==========================================================
+ */
+async function sendTransferNotification(
+  completion: GoldTransferCompletion,
+  transaction: TransactionData,
+  transactionId: string,
+  blockchainTransactionId:
+    string | null,
+): Promise<void> {
+  const deviceTokens = (
+    completion.device_tokens ?? []
+  ).filter(
+    (token): token is string =>
+      typeof token === "string" &&
+      token.trim().length > 0,
+  );
+
+  if (
+    deviceTokens.length === 0 ||
+    !completion.push_title ||
+    !completion.push_body
+  ) {
+    return;
+  }
+
+  try {
+    await sendPushNotification({
+      tokens: deviceTokens,
+      title: completion.push_title,
+      body: completion.push_body,
+      data: {
+        notification_id:
+          completion
+            .receiver_notification_id ?? "",
+        reference:
+          completion.push_reference ??
+          transaction.r,
+        transaction_type:
+          TransactionType
+            .gold_token_transfer,
+        document_number:
+          completion.document_number,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "GOLD_TRANSFER_PUSH_NOTIFICATION_FAILED",
+      {
+        transactionId,
+        blockchainTransactionId,
+        notificationId:
+          completion
+            .receiver_notification_id,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      },
+    );
+  }
+}
+
+/*
+ * ==========================================================
+ * GOLD TRANSFER EDGE FUNCTION
+ * ==========================================================
+ */
 Deno.serve(
   async (
     request: Request,
   ): Promise<Response> => {
-    let authRpc:
-      | RpcClient
-      | null = null;
+    let authRpc: RpcClient | null = null;
 
     let transactionId:
-      | string
-      | null = null;
+      string | null = null;
 
     let blockchainTransactionId:
-      | string
-      | null = null;
+      string | null = null;
 
     let blockchainTransactionHash:
-      | string
-      | null = null;
+      string | null = null;
 
-    let failureStateUpdated =
-      false;
+    let blockchainCode:
+      string | null = null;
 
-    let postingCommitted =
-      false;
+    let postingCommitted = false;
+    let submissionAttempted = false;
 
     try {
-      if (
-        request.method !== "POST"
-      ) {
+      if (request.method !== "POST") {
         throw new AppError(
           "METHOD_NOT_ALLOWED",
         );
       }
 
-      /*
-       * Authenticated client carrying the caller's JWT.
-       */
       const authSupabase =
-        createSupabaseClient(
-          request,
-        );
+        createSupabaseClient(request);
 
       authRpc =
-        asRpcClient(
-          authSupabase,
-        );
+        asRpcClient(authSupabase);
 
-      let body: {
-        transaction?:
-          TransactionData;
-      };
+      /*
+       * REQUEST VALIDATION
+       */
+      let body: TransferRequest;
 
       try {
-        body =
-          await request.json();
+        body = await request.json();
       } catch {
         throw new AppError(
           "INVALID_REQUEST_BODY",
@@ -445,6 +736,8 @@ Deno.serve(
       }
 
       if (
+        !body ||
+        typeof body !== "object" ||
         !body.transaction
       ) {
         throw new AppError(
@@ -452,19 +745,15 @@ Deno.serve(
         );
       }
 
-      /*
-       * Keep the transaction typed for canonical validation.
-       */
+      blockchainCode =
+        validateBlockchainCode(
+          body.blockchain_code,
+        );
+
       const transaction =
         body.transaction;
 
-      /*
-       * Gold Transfer has its own version.
-       * Do not change this to the Gold Buy version.
-       */
-      if (
-        transaction.v !== "v6"
-      ) {
+      if (transaction.v !== "v6") {
         throw new AppError(
           "OPERATION_NOT_ALLOWED",
         );
@@ -474,53 +763,17 @@ Deno.serve(
         transaction as unknown as Json;
 
       /*
-       * Fetch authenticated sender context.
+       * FETCH AUTHENTICATED CONTEXT
        */
-      const {
-        data: contextData,
-        error: contextError,
-      } = await authRpc.rpc(
-        "fetch_my_gold_transfer_context",
-        {
-          p_v:
-            transaction.v,
-        },
-      );
-
-      if (contextError) {
-        console.error(
-          "Gold-transfer context failed",
-          {
-            code:
-              contextError.code,
-
-            message:
-              contextError.message,
-
-            details:
-              contextError.details,
-
-            hint:
-              contextError.hint,
-          },
-        );
-
-        throw new AppError(
-          contextError.message ||
-            "GOLD_TRANSFER_CONTEXT_FAILED",
-        );
-      }
-
       const context =
-        firstRow<GoldTransferContext>(
-          contextData,
+        await rpcRow<GoldTransferContext>(
+          authRpc,
+          "fetch_my_gold_transfer_context",
+          {
+            p_v: transaction.v,
+          },
+          "GOLD_TRANSFER_CONTEXT_FAILED",
         );
-
-      if (!context) {
-        throw new AppError(
-          "GOLD_TRANSFER_CONTEXT_NOT_FOUND",
-        );
-      }
 
       if (!context.sender_id) {
         throw new AppError(
@@ -528,31 +781,23 @@ Deno.serve(
         );
       }
 
-      if (
-        !context.country_code
-      ) {
+      if (!context.country_code) {
         throw new AppError(
           "USER_COUNTRY_NOT_CONFIGURED",
         );
       }
 
-      if (
-        !context.wallet_address
-      ) {
+      if (!context.wallet_address) {
         throw new AppError(
           "USER_WALLET_NOT_CONFIGURED",
         );
       }
 
       const versionTime =
-        Number(
-          context.version_time,
-        );
+        Number(context.version_time);
 
       if (
-        !Number.isFinite(
-          versionTime,
-        ) ||
+        !Number.isFinite(versionTime) ||
         versionTime <= 0
       ) {
         throw new AppError(
@@ -561,50 +806,45 @@ Deno.serve(
       }
 
       /*
-       * Create processing transaction state.
+       * EXISTING BLOCKCHAIN RPC
+       *
+       * fetch_active_supported_blockchain
+       *
+       * Now includes explorer_url.
+       */
+      const blockchain =
+        await fetchBlockchainConfig(
+          authRpc,
+          blockchainCode,
+        );
+
+      /*
+       * CREATE TRANSACTION STATE
        */
       const {
-        data:
-          transactionStateData,
-
-        error:
-          transactionStateError,
+        data: stateData,
+        error: stateError,
       } = await authRpc.rpc(
         "create_my_gold_transfer_state",
         {
           p_transaction:
             transactionJson,
+          p_blockchain_code:
+            blockchainCode,
         },
       );
 
-      if (
-        transactionStateError
-      ) {
-        console.error(
+      if (stateError) {
+        logRpcError(
           "Gold-transfer state creation failed",
-          {
-            code:
-              transactionStateError.code,
-
-            message:
-              transactionStateError.message,
-
-            details:
-              transactionStateError.details,
-
-            hint:
-              transactionStateError.hint,
-          },
+          stateError,
         );
 
         if (
-          transactionStateError
-            .code === "23505" ||
-          transactionStateError
-            .message
-            ?.includes(
-              "TRANSACTION_REPLAY",
-            )
+          stateError.code === "23505" ||
+          stateError.message?.includes(
+            "TRANSACTION_REPLAY",
+          )
         ) {
           throw new AppError(
             "TRANSACTION_REPLAY",
@@ -613,16 +853,13 @@ Deno.serve(
         }
 
         throw new AppError(
-          transactionStateError
-            .message ||
+          stateError.message ||
             "TRANSACTION_STATE_CREATE_FAILED",
         );
       }
 
       transactionId =
-        scalarValue(
-          transactionStateData,
-        );
+        scalarValue(stateData);
 
       if (!transactionId) {
         throw new AppError(
@@ -631,7 +868,7 @@ Deno.serve(
       }
 
       /*
-       * Validate signed transaction.
+       * VERIFY SIGNED TRANSACTION
        */
       TransactionVerificationService
         .validateTransactionFields(
@@ -658,7 +895,7 @@ Deno.serve(
       }
 
       /*
-       * Service client for trusted preparation/posting.
+       * SERVICE CLIENT
        */
       const serviceSupabase =
         createSupabaseServiceClient();
@@ -669,72 +906,30 @@ Deno.serve(
         );
 
       /*
-       * Recalculate receiver, amount, fee and total amount
-       * in PostgreSQL.
+       * PREPARE GOLD TRANSFER
        */
-      const {
-        data:
-          preparationData,
-
-        error:
-          preparationError,
-      } = await serviceRpc.rpc(
-        "prepare_gold_transfer",
-        {
-          p_sender_id:
-            context.sender_id,
-
-          p_transaction:
-            transactionJson,
-
-          p_country_code:
-            context.country_code,
-
-          p_transaction_state_id:
-            transactionId,
-        },
-      );
-
-      if (preparationError) {
-        console.error(
-          "Gold-transfer preparation failed",
-          {
-            code:
-              preparationError.code,
-
-            message:
-              preparationError.message,
-
-            details:
-              preparationError.details,
-
-            hint:
-              preparationError.hint,
-
-            transactionId,
-
-            senderId:
-              context.sender_id,
-          },
-        );
-
-        throw new AppError(
-          preparationError.message ||
-            "GOLD_TRANSFER_PREPARATION_FAILED",
-        );
-      }
-
       const preparation =
-        firstRow<GoldTransferPreparation>(
-          preparationData,
+        await rpcRow<GoldTransferPreparation>(
+          serviceRpc,
+          "prepare_gold_transfer",
+          {
+            p_sender_id:
+              context.sender_id,
+            p_transaction:
+              transactionJson,
+            p_country_code:
+              context.country_code,
+            p_transaction_state_id:
+              transactionId,
+            p_blockchain_code:
+              blockchainCode,
+          },
+          "GOLD_TRANSFER_PREPARATION_FAILED",
         );
 
-      if (!preparation) {
-        throw new AppError(
-          "GOLD_TRANSFER_PREPARATION_NOT_FOUND",
-        );
-      }
-
+      /*
+       * VALIDATE PREPARATION
+       */
       if (
         preparation.sender_id !==
         context.sender_id
@@ -768,8 +963,16 @@ Deno.serve(
       }
 
       if (
-        !preparation
-          .receiver_id ||
+        preparation.blockchain_code !==
+        blockchainCode
+      ) {
+        throw new AppError(
+          "BLOCKCHAIN_CODE_MISMATCH",
+        );
+      }
+
+      if (
+        !preparation.receiver_id ||
         !preparation
           .receiver_wallet_address
       ) {
@@ -779,32 +982,12 @@ Deno.serve(
       }
 
       if (
-        !preparation
-          .treasury_id ||
+        !preparation.treasury_id ||
         !preparation
           .treasury_wallet_address
       ) {
         throw new AppError(
           "TREASURY_WALLET_NOT_CONFIGURED",
-        );
-      }
-
-      /*
-       * Blockchain fee treasury must be the same treasury
-       * used by accounting.
-       */
-      if (
-        normalizeAddress(
-          preparation
-            .treasury_wallet_address,
-        ) !==
-        normalizeAddress(
-          blockchainConfig
-            .treasuryAddress,
-        )
-      ) {
-        throw new AppError(
-          "TREASURY_BLOCKCHAIN_ADDRESS_MISMATCH",
         );
       }
 
@@ -826,8 +1009,41 @@ Deno.serve(
       }
 
       /*
-       * These values came from PostgreSQL and are also the
-       * authoritative values used for the blockchain transfer.
+       * CREATE BLOCKCHAIN CLIENT
+       */
+      const blockchainClient =
+        createBlockchainClient({
+          ...blockchain,
+          treasury_wallet_address:
+            preparation
+              .treasury_wallet_address,
+        });
+
+      if (
+        normalizeAddress(
+          preparation
+            .treasury_wallet_address,
+        ) !==
+        normalizeAddress(
+          blockchainClient
+            .treasuryAddress,
+        )
+      ) {
+        throw new AppError(
+          "TREASURY_BLOCKCHAIN_ADDRESS_MISMATCH",
+        );
+      }
+
+      /*
+       * Explorer URL from existing RPC.
+       *
+       * No additional table query.
+       */
+      const explorerBaseUrl =
+        blockchain.explorer_url;
+
+      /*
+       * VALIDATE AMOUNTS
        */
       const amount =
         validatePositiveAmount(
@@ -848,228 +1064,186 @@ Deno.serve(
         );
 
       /*
-       * Sign transfer.
-       *
-       * On-chain:
-       *
-       * sender -> receiver = amount
-       * sender -> treasury = fee
-       *
-       * Therefore sender's total gold position reduction is
-       * totalAmount.
+       * SIGN BLOCKCHAIN TRANSFER
        */
       const signedTransfer =
         await signTransfer({
           fromIndex:
             senderWalletIndex,
-
           expectedOwner:
             preparation
               .sender_wallet_address,
-
           to:
             preparation
               .receiver_wallet_address,
-
           amount,
-
           fee,
+          client:
+            blockchainClient,
+          blockchain: {
+            ...blockchain,
+            treasury_wallet_address:
+              preparation
+                .treasury_wallet_address,
+          },
         });
 
       /*
-       * Execute blockchain transfer.
+       * VERIFY TOKEN QUANTITIES
        */
+      const tokenDecimals =
+        await blockchainClient
+          .providerContract
+          .decimals();
+
+      const { parseUnits } =
+        await import("ethers");
+
+      const expectedTotal =
+        parseUnits(
+          totalAmount,
+          Number(tokenDecimals),
+        );
+
+      if (
+        signedTransfer.parsedAmount +
+          signedTransfer.parsedFee !==
+        expectedTotal
+      ) {
+        throw new AppError(
+          "BLOCKCHAIN_TRANSFER_TOTAL_MISMATCH",
+        );
+      }
+
+      /*
+       * SUBMIT BLOCKCHAIN TRANSFER
+       */
+      submissionAttempted = true;
+
       const blockchainResult =
-        await relayTransferWithPermit(
+        await relayTrackedTransferWithPermit(
           signedTransfer,
+          blockchainClient,
+          {
+            onSubmitted: async (
+              txHash: string,
+            ) => {
+              blockchainTransactionHash =
+                txHash;
+
+              const explorerUrl =
+                buildExplorerUrl(
+                  explorerBaseUrl,
+                  txHash,
+                );
+
+              /*
+               * RECORD THROUGH RPC
+               */
+              const {
+                data: recordData,
+                error: recordError,
+              } = await serviceRpc.rpc(
+                "record_gold_transfer_blockchain_transaction",
+                {
+                  p_sender_id:
+                    context.sender_id,
+                  p_transaction:
+                    transactionJson,
+                  p_country_code:
+                    context.country_code,
+                  p_transaction_state_id:
+                    transactionId,
+                  p_tx_hash:
+                    txHash,
+                  p_explorer_url:
+                    explorerUrl,
+                  p_blockchain_code:
+                    blockchainCode,
+                },
+              );
+
+              if (recordError) {
+                logRpcError(
+                  "GOLD_TRANSFER_BLOCKCHAIN_RECORD_FAILED",
+                  recordError,
+                  {
+                    transactionId,
+                    blockchainCode,
+                    txHash,
+                  },
+                );
+
+                throw new AppError(
+                  "GOLD_TRANSFER_BLOCKCHAIN_RECORD_FAILED",
+                );
+              }
+
+              blockchainTransactionId =
+                scalarValue(
+                  recordData,
+                );
+
+              if (
+                !blockchainTransactionId
+              ) {
+                throw new AppError(
+                  "BLOCKCHAIN_TRANSACTION_RECORD_NOT_FOUND",
+                );
+              }
+            },
+          },
         );
 
       blockchainTransactionHash =
         blockchainResult.txHash;
 
       if (
+        !blockchainTransactionId ||
         !blockchainTransactionHash
       ) {
-        throw new AppError(
-          "BLOCKCHAIN_TRANSACTION_HASH_MISSING",
-        );
-      }
-
-      const explorerUrl =
-        buildExplorerUrl(
-          blockchainTransactionHash,
-        );
-
-      /*
-       * Record blockchain transaction.
-       */
-      const {
-        data:
-          blockchainRecordData,
-
-        error:
-          blockchainRecordError,
-      } = await serviceRpc.rpc(
-        "record_gold_transfer_blockchain_transaction",
-        {
-          p_sender_id:
-            context.sender_id,
-
-          p_transaction:
-            transactionJson,
-
-          p_country_code:
-            context.country_code,
-
-          p_transaction_state_id:
-            transactionId,
-
-          p_tx_hash:
-            blockchainTransactionHash,
-
-          p_explorer_url:
-            explorerUrl,
-        },
-      );
-
-      if (
-        blockchainRecordError
-      ) {
-        console.error(
-          "GOLD_TRANSFER_BLOCKCHAIN_RECORD_FAILED",
-          {
-            code:
-              blockchainRecordError.code,
-
-            message:
-              blockchainRecordError.message,
-
-            details:
-              blockchainRecordError.details,
-
-            hint:
-              blockchainRecordError.hint,
-
-            transactionId,
-
-            transactionReference:
-              transaction.r,
-
-            blockchainTransactionHash,
-
-            explorerUrl,
-          },
-        );
-
-        throw new AppError(
-          blockchainRecordError
-            .message ||
-            "GOLD_TRANSFER_BLOCKCHAIN_RECORD_FAILED",
-        );
-      }
-
-      blockchainTransactionId =
-        scalarValue(
-          blockchainRecordData,
-        );
-
-      if (
-        !blockchainTransactionId
-      ) {
-        console.error(
-          "Gold-transfer blockchain record ID missing",
-          {
-            transactionId,
-
-            transactionReference:
-              transaction.r,
-
-            blockchainTransactionHash,
-
-            explorerUrl,
-          },
-        );
-
         throw new AppError(
           "BLOCKCHAIN_TRANSACTION_RECORD_NOT_FOUND",
         );
       }
 
-      const ipAddress =
-        clientIpAddress(
-          request,
-        );
-
       /*
-       * Complete GL entries, wallet entries, notifications,
-       * blockchain status and transaction state atomically.
+       * COMPLETE ACCOUNTING POSTINGS
        */
       const {
-        data:
-          completionData,
-
-        error:
-          completionError,
+        data: completionData,
+        error: completionError,
       } = await serviceRpc.rpc(
         "complete_gold_transfer",
         {
           p_sender_id:
             context.sender_id,
-
           p_transaction:
             transactionJson,
-
           p_country_code:
             context.country_code,
-
           p_transaction_state_id:
             transactionId,
-
           p_blockchain_transaction_id:
             blockchainTransactionId,
-
           p_ip_address:
-            ipAddress,
+            clientIpAddress(request),
+          p_blockchain_code:
+            blockchainCode,
         },
       );
 
       if (completionError) {
-        console.error(
+        logRpcError(
           "GOLD_TRANSFER_POSTING_FAILED",
+          completionError,
           {
-            code:
-              completionError.code,
-
-            message:
-              completionError.message,
-
-            details:
-              completionError.details,
-
-            hint:
-              completionError.hint,
-
             transactionId,
-
             blockchainTransactionId,
-
             blockchainTransactionHash,
-
-            senderId:
-              context.sender_id,
+            blockchainCode,
           },
         );
-
-        /*
-         * Attempt failed state immediately.
-         */
-        failureStateUpdated =
-          await updateFailedState(
-            authRpc,
-            transactionId,
-            completionError.message ||
-              "GOLD_TRANSFER_POSTING_FAILED",
-          );
 
         throw new AppError(
           completionError.message ||
@@ -1077,27 +1251,16 @@ Deno.serve(
         );
       }
 
-      /*
-       * complete_gold_transfer has committed successfully.
-       *
-       * Nothing below this point may mark the financial
-       * transaction as failed.
-       */
-      postingCommitted =
-        true;
+      postingCommitted = true;
 
       const completion =
         firstRow<GoldTransferCompletion>(
           completionData,
         );
 
-      /*
-       * A missing response row must not change an already
-       * committed transaction back to failed.
-       */
       if (!completion) {
         console.error(
-          "Gold-transfer completion response missing",
+          "GOLD_TRANSFER_COMPLETION_RESPONSE_MISSING",
           {
             transactionId,
             blockchainTransactionId,
@@ -1111,378 +1274,64 @@ Deno.serve(
       }
 
       /*
-       * ==========================================================
-       * FINANCIAL INTELLIGENCE — SENDER
-       * ==========================================================
-       *
-       * A gold transfer is not an investment purchase or sale.
-       *
-       * It simply moves an existing gold position.
-       *
-       * The sender loses:
-       *
-       *     transfer amount + transfer fee
-       *
-       * The SQL preparation result already gives this exact
-       * amount as total_amount.
-       *
-       * No cash/savings movement is recorded.
+       * FINANCIAL INTELLIGENCE
        */
-      try {
-        const senderFinancialActivity =
-          await recordFinancialActivity(
-            serviceSupabase,
-            {
-              reference:
-                completion.document_number,
-
-              userId:
-                context.sender_id,
-
-              countryCode:
-                context.country_code,
-
-              currencyCode:
-                "gold",
-
-              transactionType:
-                TransactionType
-                  .gold_token_transfer,
-
-              activityType:
-                FinancialActivityType
-                  .investment_transfer_out,
-
-              /*
-               * amount represents the actual gold position
-               * leaving the sender.
-               */
-              amount:
-                totalAmount,
-
-              /*
-               * Gold transfers do not generate investment
-               * behaviour based on USD value.
-               */
-              amountUsd:
-                "0.000000",
-
-              /*
-               * No fiat savings movement.
-               */
-              cashAmount:
-                "0.000000",
-
-              cashAmountUsd:
-                "0.000000",
-
-              /*
-               * Sender's exact gold-position reduction:
-               *
-               * transfer amount + gold transfer fee.
-               */
-              goldQuantity:
-                totalAmount,
-
-              investmentCostUsd:
-                "0.000000",
-            },
-          );
-
-        if (
-          senderFinancialActivity.status ===
-          "failed"
-        ) {
-          console.error(
-            "GOLD_TRANSFER_SENDER_FINANCIAL_INTELLIGENCE_FAILED",
-            {
-              transactionId,
-
-              reference:
-                completion.document_number,
-
-              senderId:
-                context.sender_id,
-
-              transferAmount:
-                completion.amount,
-
-              transferFee:
-                completion.fee,
-
-              totalGoldOut:
-                totalAmount,
-
-              error:
-                senderFinancialActivity.error,
-            },
-          );
-        }
-      } catch (financialActivityError) {
-        console.error(
-          "GOLD_TRANSFER_SENDER_FINANCIAL_INTELLIGENCE_EXCEPTION",
-          {
-            transactionId,
-
-            reference:
-              completion.document_number,
-
-            senderId:
-              context.sender_id,
-
-            totalGoldOut:
-              totalAmount,
-
-            error:
-              financialActivityError instanceof Error
-                ? financialActivityError.message
-                : String(
-                  financialActivityError,
-                ),
-          },
-        );
-      }
+      await recordTransferFinancialActivities(
+        serviceSupabase,
+        context,
+        preparation,
+        completion,
+        totalAmount,
+        transactionId,
+      );
 
       /*
-       * ==========================================================
-       * FINANCIAL INTELLIGENCE — RECEIVER
-       * ==========================================================
-       *
-       * The receiver receives only the transferred quantity.
-       *
-       * The sender's transfer fee goes to treasury and must
-       * never increase the receiver's gold position.
-       *
-       * This is transfer-in activity, not an investment buy,
-       * so it does not create investor behaviour.
-       */
-      try {
-        const receiverFinancialActivity =
-          await recordFinancialActivity(
-            serviceSupabase,
-            {
-              reference:
-                completion.document_number,
-
-              userId:
-                preparation.receiver_id,
-
-              countryCode:
-                context.country_code,
-
-              currencyCode:
-                "gold",
-
-              transactionType:
-                TransactionType
-                  .gold_token_transfer,
-
-              activityType:
-                FinancialActivityType
-                  .investment_transfer_in,
-
-              /*
-               * Receiver gets the transfer amount only.
-               */
-              amount:
-                completion.amount,
-
-              amountUsd:
-                "0.000000",
-
-              /*
-               * No fiat savings movement.
-               */
-              cashAmount:
-                "0.000000",
-
-              cashAmountUsd:
-                "0.000000",
-
-              /*
-               * Exact gold quantity received.
-               */
-              goldQuantity:
-                completion.amount,
-
-              investmentCostUsd:
-                "0.000000",
-            },
-          );
-
-        if (
-          receiverFinancialActivity.status ===
-          "failed"
-        ) {
-          console.error(
-            "GOLD_TRANSFER_RECEIVER_FINANCIAL_INTELLIGENCE_FAILED",
-            {
-              transactionId,
-
-              reference:
-                completion.document_number,
-
-              receiverId:
-                preparation.receiver_id,
-
-              goldQuantity:
-                completion.amount,
-
-              error:
-                receiverFinancialActivity.error,
-            },
-          );
-        }
-      } catch (financialActivityError) {
-        console.error(
-          "GOLD_TRANSFER_RECEIVER_FINANCIAL_INTELLIGENCE_EXCEPTION",
-          {
-            transactionId,
-
-            reference:
-              completion.document_number,
-
-            receiverId:
-              preparation.receiver_id,
-
-            goldQuantity:
-              completion.amount,
-
-            error:
-              financialActivityError instanceof Error
-                ? financialActivityError.message
-                : String(
-                  financialActivityError,
-                ),
-          },
-        );
-      }
-
-      /*
-       * ==========================================================
        * PUSH NOTIFICATION
-       * ==========================================================
-       *
-       * Push occurs after the committed financial transaction.
-       * Failure here must not fail or reverse the transfer.
        */
-      const deviceTokens =
-        (
-          completion
-            .device_tokens ??
-          []
-        ).filter(
-          (
-            token,
-          ): token is string =>
-            typeof token ===
-              "string" &&
-            token.trim()
-              .length > 0,
-        );
+      await sendTransferNotification(
+        completion,
+        transaction,
+        transactionId,
+        blockchainTransactionId,
+      );
 
-      if (
-        deviceTokens.length > 0 &&
-        completion.push_title &&
-        completion.push_body
-      ) {
-        try {
-          await sendPushNotification({
-            tokens:
-              deviceTokens,
-
-            title:
-              completion
-                .push_title,
-
-            body:
-              completion
-                .push_body,
-
-            data: {
-              notification_id:
-                completion
-                  .receiver_notification_id ??
-                "",
-
-              reference:
-                completion
-                  .push_reference ??
-                transaction.r,
-
-              transaction_type:
-                TransactionType
-                  .gold_token_transfer,
-
-              document_number:
-                completion
-                  .document_number,
-            },
-          });
-        } catch (pushError) {
-          console.error(
-            "GOLD_TRANSFER_PUSH_NOTIFICATION_FAILED",
-            {
-              transactionId,
-
-              blockchainTransactionId,
-
-              notificationId:
-                completion
-                  .receiver_notification_id,
-
-              error:
-                pushError instanceof Error
-                  ? pushError.message
-                  : String(
-                    pushError,
-                  ),
-            },
-          );
-        }
-      }
-
-      /*
-       * Flutter only checks whether the invocation throws.
-       */
       return successResponse({
         success: true,
       });
     } catch (error) {
       /*
-       * Never change an already committed successful
-       * transaction back to failed.
+       * FAILURE HANDLING
        */
       if (
         authRpc &&
         transactionId &&
         !postingCommitted &&
-        !failureStateUpdated
+        !submissionAttempted
       ) {
         const failureMessage =
           error instanceof Error
             ? error.message
             : "GOLD_TRANSFER_FAILED";
 
-        failureStateUpdated =
-          await updateFailedState(
-            authRpc,
-            transactionId,
-            failureMessage,
-          );
+        await updateFailedState(
+          authRpc,
+          transactionId,
+          failureMessage,
+        );
       }
 
       console.error(
         "GOLD_TRANSFER_ERROR",
         {
           transactionId,
-
+          blockchainCode,
           blockchainTransactionId,
-
           blockchainTransactionHash,
-
+          submissionAttempted,
           postingCommitted,
-
+          requiresReconciliation:
+            submissionAttempted &&
+            !postingCommitted,
           error:
             error instanceof Error
               ? error.message
@@ -1497,4 +1346,3 @@ Deno.serve(
     }
   },
 );
-

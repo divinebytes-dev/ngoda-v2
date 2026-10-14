@@ -24,7 +24,10 @@ class CurrencyTabs extends StatelessWidget {
       padding: EdgeInsets.all(spacing.xs),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.50),
-        borderRadius: BorderRadius.circular(radius.edgeInsert),
+        borderRadius: BorderRadius.circular(radius.cardRadius),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.09),
+        ),
       ),
       child: TabBar(
         controller: controller,
@@ -32,7 +35,7 @@ class CurrencyTabs extends StatelessWidget {
         indicatorSize: TabBarIndicatorSize.tab,
         indicator: BoxDecoration(
           color: colorScheme.primary,
-          borderRadius: BorderRadius.circular(radius.edgeInsert),
+          borderRadius: BorderRadius.circular(radius.cardRadius),
         ),
         labelColor: colorScheme.onPrimary,
         unselectedLabelColor: colorScheme.onSurfaceVariant,
