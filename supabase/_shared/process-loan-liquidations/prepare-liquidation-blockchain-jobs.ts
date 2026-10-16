@@ -1,3 +1,4 @@
+
 import {
   AppError,
 } from "../app-error.ts";
@@ -136,6 +137,17 @@ function validatePreparedJob(
     );
   }
 
+    const blockchainCode = requiredString(
+    job.blockchain_code,
+    "PREPARED_LIQUIDATION_BLOCKCHAIN_CODE_REQUIRED",
+  );
+
+  if (!/^[a-z0-9_-]+$/.test(blockchainCode)) {
+    throw new AppError(
+      "INVALID_PREPARED_LIQUIDATION_BLOCKCHAIN_CODE",
+    );
+  }
+
   return {
     job_id:
       requiredString(
@@ -164,6 +176,8 @@ function validatePreparedJob(
     currency_code:
       currencyCode,
 
+          blockchain_code: blockchainCode,
+      
     collateral:
       requiredPositiveDecimal(
         job.collateral,

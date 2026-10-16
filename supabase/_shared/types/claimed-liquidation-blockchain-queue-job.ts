@@ -31,6 +31,9 @@ export type ClaimedLiquidationBlockchainQueueJob = {
 
   queue_status: string;
 
+  blockchain_code: string;
+
+
   /*
    * When present, the blockchain transaction has already
    * been submitted. The processor must wait for this

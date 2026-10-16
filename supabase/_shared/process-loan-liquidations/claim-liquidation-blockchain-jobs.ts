@@ -88,6 +88,8 @@ function validateClaimedJob(
     isNonEmptyString(
       row.user_id,
     ) &&
+    isNonEmptyString(row.blockchain_code) &&
+    /^[a-z0-9_-]+$/.test(row.blockchain_code) &&
     walletIndexValid &&
     isNonEmptyString(
       row.treasury_id,

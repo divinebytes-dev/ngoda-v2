@@ -14,6 +14,10 @@ import type {
   ClaimedLiquidationBlockchainQueueJob,
 } from "../types/claimed-liquidation-blockchain-queue-job.ts";
 
+import {
+  treasuryAddress,
+} from "../blockchain/client.ts";
+
 
 function requiredString(
   value: unknown,
@@ -166,32 +170,6 @@ function requiredBigInt(
       errorMessage,
     );
   }
-}
-
-
-export function fetchGlobalTreasuryAddress():
-  string {
-  /*
-   * Gold uses one global blockchain treasury address.
-   *
-   * Country treasury users remain separate in the
-   * country-specific database ledger.
-   */
-  const address =
-    Deno.env
-      .get("TREASURY")
-      ?.trim();
-
-  if (!address) {
-    throw new AppError(
-      "GLOBAL_TREASURY_WALLET_NOT_CONFIGURED",
-    );
-  }
-
-  return requiredAddress(
-    address,
-    "INVALID_GLOBAL_TREASURY_WALLET_ADDRESS",
-  );
 }
 
 
@@ -411,8 +389,7 @@ export function validateSignedTransferForJob(
       "INVALID_LIQUIDATION_SENDER_WALLET_ADDRESS",
     );
 
-  const treasuryAddress =
-    fetchGlobalTreasuryAddress();
+
 
   if (
     transfer.owner.toLowerCase() !==

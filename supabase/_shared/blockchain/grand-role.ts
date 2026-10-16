@@ -1,6 +1,5 @@
 import {
-  adminContract,
-  blockchainConfig,
+  createBlockchainClient,
 } from "./client.ts";
 
 import {
@@ -12,11 +11,13 @@ import {
   AppError,
 } from "../app-error.ts";
 
+import type {
+  SupportedBlockchainConfig,
+} from "../types/supported_blockchain_config.ts";
 
 export type TokenRole =
   | "MINTER_ROLE"
   | "BURNER_ROLE";
-
 
 function getRoleHash(
   role: TokenRole,
@@ -36,23 +37,20 @@ function getRoleHash(
   }
 }
 
-
 export async function grantTokenRole(
   role: TokenRole,
+  blockchain: SupportedBlockchainConfig & {
+    treasury_wallet_address: string;
+  },
 ) {
-  const roleHash =
-    getRoleHash(role);
+  const roleHash = getRoleHash(role);
 
-  const account =
-    blockchainConfig.treasuryAddress;
+  const client = createBlockchainClient(blockchain);
 
-  /*
-   * Do not submit another blockchain
-   * transaction if the treasury already
-   * has this role.
-   */
+  const account = blockchain.treasury_wallet_address;
+
   const alreadyGranted =
-    await adminContract.hasRole(
+    await client.adminContract.hasRole(
       roleHash,
       account,
     );
@@ -66,21 +64,13 @@ export async function grantTokenRole(
     };
   }
 
-  /*
-   * adminContract is connected to the
-   * administrator signer.
-   *
-   * The role itself is granted to the
-   * treasury address.
-   */
   const tx =
-    await adminContract.grantRole(
+    await client.adminContract.grantRole(
       roleHash,
       account,
     );
 
-  const receipt =
-    await tx.wait();
+  const receipt = await tx.wait();
 
   if (!receipt) {
     throw new AppError(

@@ -1,7 +1,7 @@
 import {
   formatEther,
   formatUnits,
-  ethers
+  ethers,
 } from "ethers";
 
 import {
@@ -9,19 +9,16 @@ import {
 } from "../app-error.ts";
 
 import {
-  provider,
-  providerContract,
-    createBlockchainReadClient,
-  relayerAddress, 
+  createBlockchainReadClient,
 } from "./client.ts";
 
-import {
+import type {
   SupportedBlockchainConfig,
 } from "../types/supported_blockchain_config.ts";
-import {
+
+import type {
   SupportedBlockchainBalance,
 } from "../types/supported_blockchain_balance.ts";
-
 
 const ZERO_ADDRESS =
   "0x0000000000000000000000000000000000000000";
@@ -40,13 +37,13 @@ export type BlockchainConfig = {
 };
 
 export async function getBlockchainWalletBalances(
+  blockchain: SupportedBlockchainConfig,
   address: string,
 ): Promise<BlockchainWalletBalances> {
   if (
     !address ||
     address === "0x00" ||
-    address.toLowerCase() ===
-      ZERO_ADDRESS
+    address.toLowerCase() === ZERO_ADDRESS
   ) {
     return {
       token_balance: "0",
@@ -54,22 +51,33 @@ export async function getBlockchainWalletBalances(
     };
   }
 
+  if (!ethers.isAddress(address)) {
+    throw new AppError(
+      "INVALID_BLOCKCHAIN_WALLET_ADDRESS",
+    );
+  }
+
+  const {
+    provider,
+    contract,
+  } = createBlockchainReadClient(blockchain);
+
   const [
     tokenRaw,
     tokenDecimals,
     gasRaw,
   ] = await Promise.all([
-    providerContract.balanceOf(address),
-    providerContract.decimals(),
+    contract.balanceOf(address),
+    contract.decimals(),
     provider.getBalance(address),
   ]);
 
-  const decimals =
-    Number(tokenDecimals);
+  const decimals = Number(tokenDecimals);
 
   if (
     !Number.isSafeInteger(decimals) ||
-    decimals < 0
+    decimals < 0 ||
+    decimals > 255
   ) {
     throw new AppError(
       "INVALID_TOKEN_DECIMALS",
@@ -77,47 +85,71 @@ export async function getBlockchainWalletBalances(
   }
 
   return {
-    token_balance:
-      formatUnits(
-        tokenRaw,
-        decimals,
-      ),
-    gas_balance:
-      formatEther(gasRaw),
+    token_balance: formatUnits(
+      tokenRaw,
+      decimals,
+    ),
+    gas_balance: formatEther(gasRaw),
   };
 }
 
-export async function getRelayerGasBalance():
-  Promise<string> {
-      const relayerAddress =  getRelayerAddress();
-  const balances =
-    await getBlockchainWalletBalances(
-      relayerAddress,
-    );
+export async function getRelayerGasBalance(
+  blockchain: SupportedBlockchainConfig,
+): Promise<string> {
+  const address = getRelayerAddress();
 
-  return balances.gas_balance;
+  const {
+    provider,
+  } = createBlockchainReadClient(blockchain);
+
+  const gasBalance =
+    await provider.getBalance(address);
+
+  return formatEther(gasBalance);
 }
 
-export async function getTotalSupply(): Promise<{
+export async function getTotalSupply(
+  blockchain: SupportedBlockchainConfig,
+): Promise<{
   token_balance: string;
 }> {
-  const totalSupply = await providerContract.totalSupply();
-  const tokenDecimals = await providerContract.decimals();
-  const decimals = tokenDecimals.toString();
+  const {
+    contract,
+  } = createBlockchainReadClient(blockchain);
+
+  const [
+    totalSupply,
+    tokenDecimals,
+  ] = await Promise.all([
+    contract.totalSupply(),
+    contract.decimals(),
+  ]);
+
   return {
-    token_balance:
-      formatTokenAmount(totalSupply, decimals),
+    token_balance: formatTokenAmount(
+      totalSupply,
+      Number(tokenDecimals),
+    ),
   };
 }
 
 function formatTokenAmount(
   amount: bigint,
-  decimals: string,
+  decimals: number,
 ): string {
-  
+  if (
+    !Number.isSafeInteger(decimals) ||
+    decimals < 0 ||
+    decimals > 255
+  ) {
+    throw new AppError(
+      "INVALID_TOKEN_DECIMALS",
+    );
+  }
+
   return ethers.formatUnits(
     amount,
-    Number(decimals),
+    decimals,
   );
 }
 
@@ -126,13 +158,13 @@ function getRelayerAddress(): string {
     Deno.env.get("RELAYER_ADDRESS");
 
   if (!address) {
-    throw new Error(
+    throw new AppError(
       "RELAYER_ADDRESS_MISSING",
     );
   }
 
   if (!ethers.isAddress(address)) {
-    throw new Error(
+    throw new AppError(
       "INVALID_RELAYER_ADDRESS",
     );
   }
@@ -182,21 +214,17 @@ export async function getSupportedBlockchainBalance(
   return {
     blockchain_code: blockchain.code,
     chain_id: blockchain.chain_id,
-
     token_supply: formatUnits(
       totalSupply,
       decimals,
     ),
-
     balance: formatUnits(
       tokenBalance,
       decimals,
     ),
-
     gas_balance: formatEther(
       gasBalance,
     ),
-
     native_currency_code:
       blockchain.native_currency_code,
   };

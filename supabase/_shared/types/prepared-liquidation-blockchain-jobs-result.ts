@@ -7,8 +7,8 @@ export type PreparedLiquidationBlockchainJob = {
   user_id: string;
 
   currency_code: string;
+  blockchain_code: string;  
   collateral: string;
-
   sender_wallet_address: string;
   receiver_wallet_address: string;
 };
