@@ -1,3 +1,10 @@
+import { formatUnits } from "ethers";
+import type {
+  SupportedBlockchainConfig,
+} from "../../_shared/types/supported_blockchain_config.ts";
+
+// supabase/functions/loan-preview/index.ts
+
 // supabase/functions/loan-disbursement/index.ts
 
 import {
@@ -230,6 +237,22 @@ Deno.serve(
       }
 
 
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        throw new AppError("INVALID_REQUEST_BODY");
+      }
+      if (typeof body.reference !== "string") {
+        throw new AppError("REFERENCE_REQUIRED");
+      }
+      if (body.required_amount !== undefined &&
+          typeof body.required_amount !== "string" &&
+          typeof body.required_amount !== "number") {
+        throw new AppError("INVALID_LOAN_AMOUNT");
+      }
+      if (typeof body.required_amount === "number" &&
+          !Number.isFinite(body.required_amount)) {
+        throw new AppError("INVALID_LOAN_AMOUNT");
+      }
+
       const requiredAmount =
         body.required_amount;
 
@@ -357,21 +380,53 @@ Deno.serve(
        * Fetch the latest blockchain Gold balance immediately
        * before executing the loan.
        */
-      const blockchainBalances =
-        await getBlockchainWalletBalances(
-          context.wallet_address,
-        );
+      const { data: configData, error: configError } =
+        await rpcClient.rpc("fetch_active_supported_blockchains");
 
-
-      if (
-        !blockchainBalances
-          .token_balance
-      ) {
-        throw new AppError(
-          "BLOCKCHAIN_BALANCE_NOT_FOUND",
-        );
+      if (configError) {
+        throw new AppError(configError.message || "LOAN_DISBURSEMENT_BLOCKCHAIN_CONFIG_FAILED");
+      }
+      if (!Array.isArray(configData)) {
+        throw new AppError("INVALID_LOAN_BLOCKCHAIN_CONFIG");
       }
 
+      const codes = new Set<string>();
+      let totalGoldUnits = 0n;
+      for (const rawConfig of configData) {
+        if (!rawConfig || typeof rawConfig !== "object" ||
+            typeof rawConfig.code !== "string" ||
+            !/^[a-z0-9_-]+$/.test(rawConfig.code) ||
+            codes.has(rawConfig.code)) {
+          throw new AppError("INVALID_LOAN_BLOCKCHAIN_CONFIG");
+        }
+        codes.add(rawConfig.code);
+        const chainId = Number(rawConfig.chain_id);
+        if (!Number.isSafeInteger(chainId) || chainId <= 0) {
+          throw new AppError("INVALID_BLOCKCHAIN_CHAIN_ID");
+        }
+        const blockchain = {
+          ...rawConfig,
+          chain_id: chainId,
+        } as SupportedBlockchainConfig;
+
+        // Read every active chain. Any failed read stops disbursement.
+        const balances = await getBlockchainWalletBalances(
+          blockchain,
+          context.wallet_address,
+        );
+        const tokenBalance = balances.token_balance;
+        if (typeof tokenBalance !== "string" ||
+            !/^\d+(?:\.\d+)?$/.test(tokenBalance)) {
+          throw new AppError("INVALID_BLOCKCHAIN_TOKEN_BALANCE");
+        }
+        // Integer arithmetic avoids floating-point rounding. Truncate each
+        // chain to Ngoda's six GOLD decimals before adding its balance.
+        const [whole, fraction = ""] = tokenBalance.split(".");
+        const onChainUnits = BigInt(whole) * 1_000_000n +
+          BigInt((fraction + "000000").slice(0, 6));
+        totalGoldUnits += onChainUnits;
+      }
+      const tokenBalance = formatUnits(totalGoldUnits, 6);
 
       const ipAddress =
         getIpAddress(
@@ -413,8 +468,7 @@ Deno.serve(
               ),
 
             p_token_balance:
-              blockchainBalances
-                .token_balance,
+              tokenBalance,
 
             p_reference:
               reference,
@@ -461,6 +515,12 @@ Deno.serve(
           },
         );
 
+
+        if (disbursementError.message.includes(
+          "LOAN_POSITION_LIQUIDATION_IN_PROGRESS",
+        )) {
+          throw new AppError("LOAN_POSITION_LIQUIDATION_IN_PROGRESS", 409);
+        }
 
         if (
           disbursementError
@@ -889,4 +949,3 @@ Deno.serve(
     }
   },
 );
-

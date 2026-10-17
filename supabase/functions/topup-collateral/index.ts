@@ -1,3 +1,8 @@
+import { formatUnits } from "ethers";
+import type {
+  SupportedBlockchainConfig,
+} from "../../_shared/types/supported_blockchain_config.ts";
+
 import {
   errorResponse,
   successResponse,
@@ -97,11 +102,16 @@ Deno.serve(async (request: Request) => {
     }
 
 
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new AppError("INVALID_REQUEST_BODY", 400);
+    }
+
     const transaction =
       body.transaction;
 
 
-    if (!transaction) {
+    if (!transaction || typeof transaction !== "object" ||
+        Array.isArray(transaction)) {
       throw new AppError(
         "TRANSACTION_DATA_MISSING",
         400,
@@ -288,31 +298,9 @@ Deno.serve(async (request: Request) => {
     }
 
 
-    const requestedCollateral =
-      signedAmount / 100;
-
-
-    if (
-      !Number.isFinite(
-        requestedCollateral,
-      ) ||
-      requestedCollateral <= 0
-    ) {
-      throw new AppError(
-        "INVALID_COLLATERAL_AMOUNT",
-      );
-    }
-
-
-    /*
-     * SQL accepts text so preserve the decimal representation
-     * rather than performing any further arithmetic here.
-     */
-    const requestedCollateralText =
-      requestedCollateral.toFixed(
-        6,
-      );
-
+    // Preserve the existing signed convention: transaction.a / 100 grams.
+    // Convert with integer arithmetic after signature verification.
+    const requestedCollateralText = formatUnits(BigInt(signedAmount), 2);
 
     /*
      * ======================================================
@@ -342,43 +330,53 @@ Deno.serve(async (request: Request) => {
      *
      * Flutter must not provide the authoritative balance.
      */
-    const blockchainBalances =
-      await getBlockchainWalletBalances(
-        context.user_wallet_address,
-      );
+      const { data: configData, error: configError } =
+        await authSupabase.rpc("fetch_active_supported_blockchains");
 
+      if (configError) {
+        throw new AppError(configError.message || "ADDITIONAL_COLLATERAL_BLOCKCHAIN_CONFIG_FAILED");
+      }
+      if (!Array.isArray(configData)) {
+        throw new AppError("INVALID_LOAN_BLOCKCHAIN_CONFIG");
+      }
 
-    const tokenBalance =
-      blockchainBalances
-        .token_balance;
+      const codes = new Set<string>();
+      let totalGoldUnits = 0n;
+      for (const rawConfig of configData) {
+        if (!rawConfig || typeof rawConfig !== "object" ||
+            typeof rawConfig.code !== "string" ||
+            !/^[a-z0-9_-]+$/.test(rawConfig.code) ||
+            codes.has(rawConfig.code)) {
+          throw new AppError("INVALID_LOAN_BLOCKCHAIN_CONFIG");
+        }
+        codes.add(rawConfig.code);
+        const chainId = Number(rawConfig.chain_id);
+        if (!Number.isSafeInteger(chainId) || chainId <= 0) {
+          throw new AppError("INVALID_BLOCKCHAIN_CHAIN_ID");
+        }
+        const blockchain = {
+          ...rawConfig,
+          chain_id: chainId,
+        } as SupportedBlockchainConfig;
 
-
-    if (
-      typeof tokenBalance !== "string" ||
-      tokenBalance.trim() === ""
-    ) {
-      throw new AppError(
-        "INVALID_BLOCKCHAIN_TOKEN_BALANCE",
-      );
-    }
-
-
-    /*
-     * PostgreSQL performs the authoritative numeric parsing
-     * and available-collateral validation.
-     *
-     * Pass the blockchain decimal string directly.
-     */
-    if (
-      !/^\d+(?:\.\d+)?$/.test(
-        tokenBalance.trim(),
-      )
-    ) {
-      throw new AppError(
-        "INVALID_BLOCKCHAIN_TOKEN_BALANCE",
-      );
-    }
-
+        // Read every active chain. Any failed read stops the top-up.
+        const balances = await getBlockchainWalletBalances(
+          blockchain,
+          context.user_wallet_address,
+        );
+        const tokenBalance = balances.token_balance;
+        if (typeof tokenBalance !== "string" ||
+            !/^\d+(?:\.\d+)?$/.test(tokenBalance)) {
+          throw new AppError("INVALID_BLOCKCHAIN_TOKEN_BALANCE");
+        }
+        // Integer arithmetic avoids floating-point rounding. Truncate each
+        // chain to Ngoda's six GOLD decimals before adding its balance.
+        const [whole, fraction = ""] = tokenBalance.split(".");
+        const onChainUnits = BigInt(whole) * 1_000_000n +
+          BigInt((fraction + "000000").slice(0, 6));
+        totalGoldUnits += onChainUnits;
+      }
+      const tokenBalance = formatUnits(totalGoldUnits, 6);
 
     /*
      * ======================================================
@@ -413,24 +411,6 @@ Deno.serve(async (request: Request) => {
       },
     );
 
-console.log(
-  "ADDITIONAL_COLLATERAL_RPC_RESULT",
-  {
-    requestedCollateral:
-      requestedCollateralText,
-
-    tokenBalance:
-      tokenBalance.trim(),
-
-    reference,
-
-    data,
-
-    error:
-      collateralError,
-  },
-);
-
     if (collateralError) {
       console.error(
         "ADDITIONAL_COLLATERAL_FAILED",
@@ -460,6 +440,12 @@ console.log(
         },
       );
 
+
+      if (collateralError.message.includes(
+        "LOAN_POSITION_LIQUIDATION_IN_PROGRESS",
+      )) {
+        throw new AppError("LOAN_POSITION_LIQUIDATION_IN_PROGRESS", 409);
+      }
 
       if (
         collateralError.code === "23505" ||
