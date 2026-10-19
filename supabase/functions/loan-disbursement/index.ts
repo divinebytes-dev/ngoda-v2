@@ -2,79 +2,57 @@ import { formatUnits } from "ethers";
 import type {
   SupportedBlockchainConfig,
 } from "../../_shared/types/supported_blockchain_config.ts";
-
-// supabase/functions/loan-preview/index.ts
-
 // supabase/functions/loan-disbursement/index.ts
-
 import {
   errorResponse,
   successResponse,
 } from "../../_shared/api-response.ts";
-
 import {
-  createSupabaseClient,
+  authenticateRequest,
+  createSupabaseServiceClient,
 } from "../../_shared/supabase-client.ts";
-
 import {
   AppError,
 } from "../../_shared/app-error.ts";
-
 import {
   getBlockchainWalletBalances,
 } from "../../_shared/blockchain/balances.ts";
-
 import {
   sendPushNotification,
 } from "../../_shared/push-notification.ts";
-
 import {
   recordFinancialActivity,
 } from "../../_shared/financial-intelligence/record-financial-activity.ts";
-
 import {
   FinancialActivityType,
 } from "../../_shared/types/financial-activity-type.ts";
-
-
 type LoanDisbursementRequest = {
   required_amount?:
     | string
     | number;
-
   reference?: string;
 };
-
-
 type LoanDisbursementContext = {
   wallet_address: string;
   country_code: string;
 };
-
-
 type LoanDisbursementResult = {
   success: boolean;
-
   document_number: string;
-
   loan_id: string;
-
   /*
    * Authoritative customer returned by the committed
    * PostgreSQL transaction.
    */
   customer_id: string;
-
   /*
    * Authoritative country returned by PostgreSQL.
    */
   country_code: string;
-
   /*
    * Loans are always USD.
    */
   currency_code: string;
-
   /*
    * Full loan principal.
    *
@@ -83,11 +61,8 @@ type LoanDisbursementResult = {
    * loan principal = 100
    */
   principal_amount: string;
-
   collateral_locked: string;
-
   initiation_fee: string;
-
   /*
    * Actual USD credited to the customer's wallet.
    *
@@ -98,45 +73,28 @@ type LoanDisbursementResult = {
    * net disbursed  = 98
    */
   net_disbursed: string;
-
   notification_id: string | null;
-
   device_tokens: string[] | null;
-
   push_title: string | null;
-
   push_body: string | null;
-
   push_reference: string | null;
 };
-
-
 type RpcError = {
   code?: string;
-
   message: string;
-
   details?: string | null;
-
   hint?: string | null;
 };
-
-
 type RpcResult = {
   data: unknown;
-
   error: RpcError | null;
 };
-
-
 type UntypedRpcClient = {
   rpc(
     functionName: string,
     parameters?: Record<string, unknown>,
   ): Promise<RpcResult>;
 };
-
-
 function getErrorMessage(
   error: unknown,
   fallback: string,
@@ -147,17 +105,13 @@ function getErrorMessage(
   ) {
     return error.message;
   }
-
   if (
     typeof error === "string"
   ) {
     return error;
   }
-
   return fallback;
 }
-
-
 function getIpAddress(
   request: Request,
 ): string {
@@ -165,16 +119,13 @@ function getIpAddress(
     request.headers.get(
       "x-forwarded-for",
     );
-
   const forwardedAddress =
     forwardedFor
       ?.split(",")[0]
       ?.trim();
-
   if (forwardedAddress) {
     return forwardedAddress;
   }
-
   return (
     request.headers
       .get("x-real-ip")
@@ -182,8 +133,6 @@ function getIpAddress(
     "unknown"
   );
 }
-
-
 Deno.serve(
   async (
     request: Request,
@@ -202,23 +151,18 @@ Deno.serve(
           "METHOD_NOT_ALLOWED",
         );
       }
-
-
       /*
        * ========================================================
        * AUTHENTICATED CLIENT
        * ========================================================
        */
-      const authSupabase =
-        createSupabaseClient(
-          request,
-        );
-
+      const { supabase: authSupabase, userId } =
+        await authenticateRequest(request);
+      const postingSupabase = createSupabaseServiceClient();
+      const postingRpc = postingSupabase as unknown as UntypedRpcClient;
       const rpcClient =
         authSupabase as unknown as
           UntypedRpcClient;
-
-
       /*
        * ========================================================
        * REQUEST BODY
@@ -226,7 +170,6 @@ Deno.serve(
        */
       let body:
         LoanDisbursementRequest;
-
       try {
         body =
           await request.json();
@@ -235,8 +178,6 @@ Deno.serve(
           "INVALID_REQUEST_BODY",
         );
       }
-
-
       if (!body || typeof body !== "object" || Array.isArray(body)) {
         throw new AppError("INVALID_REQUEST_BODY");
       }
@@ -252,11 +193,8 @@ Deno.serve(
           !Number.isFinite(body.required_amount)) {
         throw new AppError("INVALID_LOAN_AMOUNT");
       }
-
       const requiredAmount =
         body.required_amount;
-
-
       if (
         requiredAmount ===
           undefined ||
@@ -270,20 +208,14 @@ Deno.serve(
           "AMOUNT_REQUIRED",
         );
       }
-
-
       const reference =
         body.reference
           ?.trim();
-
-
       if (!reference) {
         throw new AppError(
           "REFERENCE_REQUIRED",
         );
       }
-
-
       /*
        * ========================================================
        * LOAN CONTEXT
@@ -302,58 +234,42 @@ Deno.serve(
       const {
         data:
           contextData,
-
         error:
           contextError,
       } =
         await rpcClient.rpc(
           "fetch_my_loan_preview_context",
         );
-
-
       if (contextError) {
         console.error(
           "LOAN_DISBURSEMENT_CONTEXT_FAILED",
           {
             code:
               contextError.code,
-
             message:
               contextError.message,
-
             details:
               contextError.details,
-
             hint:
               contextError.hint,
           },
         );
-
-
         throw new AppError(
           contextError.message ||
             "LOAN_DISBURSEMENT_CONTEXT_FAILED",
         );
       }
-
-
       const contextRows =
         contextData as
           LoanDisbursementContext[] |
           null;
-
-
       const context =
         contextRows?.[0];
-
-
       if (!context) {
         throw new AppError(
           "LOAN_DISBURSEMENT_CONTEXT_NOT_FOUND",
         );
       }
-
-
       if (
         !context.wallet_address
       ) {
@@ -361,8 +277,6 @@ Deno.serve(
           "USER_WALLET_NOT_CONFIGURED",
         );
       }
-
-
       if (
         !context.country_code
       ) {
@@ -370,8 +284,6 @@ Deno.serve(
           "USER_COUNTRY_NOT_CONFIGURED",
         );
       }
-
-
       /*
        * ========================================================
        * BLOCKCHAIN GOLD BALANCE
@@ -382,14 +294,12 @@ Deno.serve(
        */
       const { data: configData, error: configError } =
         await rpcClient.rpc("fetch_active_supported_blockchains");
-
       if (configError) {
         throw new AppError(configError.message || "LOAN_DISBURSEMENT_BLOCKCHAIN_CONFIG_FAILED");
       }
-      if (!Array.isArray(configData)) {
+      if (!Array.isArray(configData) || configData.length === 0) {
         throw new AppError("INVALID_LOAN_BLOCKCHAIN_CONFIG");
       }
-
       const codes = new Set<string>();
       let totalGoldUnits = 0n;
       for (const rawConfig of configData) {
@@ -408,7 +318,6 @@ Deno.serve(
           ...rawConfig,
           chain_id: chainId,
         } as SupportedBlockchainConfig;
-
         // Read every active chain. Any failed read stops disbursement.
         const balances = await getBlockchainWalletBalances(
           blockchain,
@@ -427,13 +336,10 @@ Deno.serve(
         totalGoldUnits += onChainUnits;
       }
       const tokenBalance = formatUnits(totalGoldUnits, 6);
-
       const ipAddress =
         getIpAddress(
           request,
         );
-
-
       /*
        * ========================================================
        * EXECUTE LOAN
@@ -455,33 +361,27 @@ Deno.serve(
       const {
         data:
           resultData,
-
         error:
           disbursementError,
       } =
-        await rpcClient.rpc(
-          "execute_my_loan_disbursement",
+        await postingRpc.rpc(
+          "execute_loan_disbursement",
           {
+            p_user_id: userId,
             p_requested_amount:
               String(
                 requiredAmount,
               ),
-
             p_token_balance:
               tokenBalance,
-
             p_reference:
               reference,
-
             p_currency_code:
               "usd",
-
             p_ip_address:
               ipAddress,
           },
         );
-
-
       /*
        * ========================================================
        * LOAN POSTING FAILED
@@ -495,33 +395,24 @@ Deno.serve(
           {
             code:
               disbursementError.code,
-
             message:
               disbursementError.message,
-
             details:
               disbursementError.details,
-
             hint:
               disbursementError.hint,
-
             reference,
-
             walletAddress:
               context.wallet_address,
-
             countryCode:
               context.country_code,
           },
         );
-
-
         if (disbursementError.message.includes(
           "LOAN_POSITION_LIQUIDATION_IN_PROGRESS",
         )) {
           throw new AppError("LOAN_POSITION_LIQUIDATION_IN_PROGRESS", 409);
         }
-
         if (
           disbursementError
             .code ===
@@ -540,16 +431,12 @@ Deno.serve(
             409,
           );
         }
-
-
         throw new AppError(
           disbursementError
             .message ||
             "LOAN_DISBURSEMENT_FAILED",
         );
       }
-
-
       /*
        * ========================================================
        * COMMITTED RESULT
@@ -562,12 +449,8 @@ Deno.serve(
         resultData as
           LoanDisbursementResult[] |
           null;
-
-
       const result =
         resultRows?.[0];
-
-
       if (
         !result ||
         result.success !==
@@ -577,8 +460,6 @@ Deno.serve(
           "LOAN_DISBURSEMENT_FAILED",
         );
       }
-
-
       /*
        * ========================================================
        * FINANCIAL INTELLIGENCE
@@ -612,61 +493,37 @@ Deno.serve(
       try {
         const financialActivity =
           await recordFinancialActivity(
-            authSupabase,
+            postingSupabase,
             {
               reference:
-
                 reference,
-
-
               /*
                * Use the customer returned from the committed
                * PostgreSQL transaction.
                */
               userId:
-
                 result.customer_id,
-
-
               countryCode:
-
                 result.country_code,
-
-
               /*
                * Loans are always USD.
                */
               currencyCode:
-
                 "usd",
-
-
               transactionType:
-
                 "loan_disbursement",
-
-
               activityType:
-
                 FinancialActivityType
                   .loan_disbursement,
-
-
               /*
                * Behavioral borrowing amount.
                *
                * This is the FULL loan principal.
                */
               amount:
-
                 result.principal_amount,
-
-
               amountUsd:
-
                 result.principal_amount,
-
-
               /*
                * Actual cash deposited into the customer's
                * USD wallet.
@@ -674,44 +531,26 @@ Deno.serve(
                * This becomes savings inflow.
                */
               cashAmount:
-
                 result.net_disbursed,
-
-
               cashAmountUsd:
-
                 result.net_disbursed,
-
-
               /*
                * Explicit loan principal movement.
                */
               principalAmount:
-
                 result.principal_amount,
-
-
               principalAmountUsd:
-
                 result.principal_amount,
-
-
               /*
                * No interest is created during the
                * disbursement event.
                */
               interestAmount:
-
                 "0.000000",
-
-
               interestAmountUsd:
-
                 "0.000000",
             },
           );
-
-
         if (
           financialActivity
             .status ===
@@ -721,25 +560,19 @@ Deno.serve(
             "LOAN_DISBURSEMENT_FINANCIAL_INTELLIGENCE_FAILED",
             {
               reference,
-
               documentNumber:
                 result
                   .document_number,
-
               loanId:
                 result.loan_id,
-
               customerId:
                 result.customer_id,
-
               principalAmount:
                 result
                   .principal_amount,
-
               netDisbursed:
                 result
                   .net_disbursed,
-
               error:
                 financialActivity
                   .error,
@@ -760,17 +593,13 @@ Deno.serve(
           "LOAN_DISBURSEMENT_FINANCIAL_INTELLIGENCE_EXCEPTION",
           {
             reference,
-
             documentNumber:
               result
                 .document_number,
-
             loanId:
               result.loan_id,
-
             customerId:
               result.customer_id,
-
             error:
               getErrorMessage(
                 financialError,
@@ -779,8 +608,6 @@ Deno.serve(
           },
         );
       }
-
-
       /*
        * ========================================================
        * PUSH NOTIFICATION
@@ -794,8 +621,6 @@ Deno.serve(
       const deviceTokens =
         result.device_tokens ??
         [];
-
-
       if (
         deviceTokens.length >
           0 &&
@@ -806,48 +631,26 @@ Deno.serve(
           await sendPushNotification(
             {
               tokens:
-
                 deviceTokens,
-
-
               title:
-
                 result.push_title,
-
-
               body:
-
                 result.push_body,
-
-
               data: {
                 notification_id:
-
                   result
                     .notification_id ??
                   "",
-
-
                 reference:
-
                   result
                     .push_reference ??
                   reference,
-
-
                 transaction_type:
-
                   "loan_disbursement",
-
-
                 document_number:
-
                   result
                     .document_number,
-
-
                 loan_id:
-
                   result.loan_id,
               },
             },
@@ -859,18 +662,14 @@ Deno.serve(
             "LOAN_DISBURSEMENT_PUSH_FAILED",
             {
               reference,
-
               documentNumber:
                 result
                   .document_number,
-
               loanId:
                 result.loan_id,
-
               notificationId:
                 result
                   .notification_id,
-
               error:
                 getErrorMessage(
                   pushError,
@@ -880,8 +679,6 @@ Deno.serve(
           );
         }
       }
-
-
       /*
        * ========================================================
        * RESPONSE
@@ -890,41 +687,22 @@ Deno.serve(
       return successResponse(
         {
           success:
-
             true,
-
-
           document_number:
-
             result
               .document_number,
-
-
           loan_id:
-
             result.loan_id,
-
-
           principal_amount:
-
             result
               .principal_amount,
-
-
           collateral_locked:
-
             result
               .collateral_locked,
-
-
           initiation_fee:
-
             result
               .initiation_fee,
-
-
           net_disbursed:
-
             result
               .net_disbursed,
         },
@@ -940,8 +718,6 @@ Deno.serve(
             ),
         },
       );
-
-
       return errorResponse(
         error,
         "LOAN_DISBURSEMENT_FAILED",

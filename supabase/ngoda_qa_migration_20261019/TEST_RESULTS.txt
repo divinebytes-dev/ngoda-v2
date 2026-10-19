@@ -1,0 +1,18 @@
+PASS 01_schema.sql
+PASS 02_registration_auth_trigger.sql
+PASS 03_integrity_checks.sql
+PASS 04_parent_references.sql
+PASS 05_table_security.sql
+PASS 06_ledger_guards.sql
+PASS 07_rpc_permissions.sql
+PASS 09_badge_metric.sql
+PASS 10_master_data.sql
+PASS 13_verify_registration_and_seed.sql
+BODY_CHECK []
+COUNTS [{"tables":98,"agent_splits":10,"pending":15,"verified":15,"rates":0}]
+PASS actual schema RPC verification
+PASS RLS on all 98 application tables
+PASS Auth insert records registration proof
+PASS Auth metadata update cannot forge creation proof
+PASS permission migration repeat
+PASS integrity balance trigger explicitly SECURITY DEFINER, postgres owner, empty search_path

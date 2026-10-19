@@ -4,7 +4,7 @@ import {
 } from "../../_shared/api-response.ts";
 
 import {
-  createSupabaseClient,
+  createSupabaseAnonClient,
   createSupabaseServiceClient,
 } from "../../_shared/supabase-client.ts";
 
@@ -60,6 +60,20 @@ type RpcClient = {
   ) => Promise<RpcResult>;
 };
 
+const PROFILE_ROLLBACK_ERROR_CODES = new Set([
+  "P0001",
+  "23505",
+  "23503",
+  "23514",
+  "23502",
+  "42501",
+  "22023",
+  "22P02",
+  "22003",
+  "40001",
+  "40P01",
+]);
+
 function asRpcClient(
   client: unknown,
 ): RpcClient {
@@ -93,11 +107,7 @@ function scalarValue(
       first !== null &&
       typeof first === "object"
     ) {
-      const values =
-        Object.values(first);
-
-      const value =
-        values[0];
+      const value = Object.values(first)[0];
 
       if (
         typeof value === "string" ||
@@ -111,12 +121,37 @@ function scalarValue(
   return null;
 }
 
+function logRpcError(
+  event: string,
+  error: RpcError,
+): void {
+  console.error(
+    event,
+    {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    },
+  );
+}
+
 Deno.serve(
   async (
     request: Request,
   ): Promise<Response> => {
+    /*
+     * Set only after the database proves that this
+     * registration attempt created the Auth account.
+     */
     let authUserId: string | null = null;
+
     let profileCreated = false;
+    let profileRequestStarted = false;
+    let profileRollbackConfirmed = false;
+
+    const registrationAttemptId =
+      crypto.randomUUID();
 
     try {
       if (request.method !== "POST") {
@@ -129,8 +164,20 @@ Deno.serve(
       let body: SignUpRequest;
 
       try {
-        body =
+        const parsedBody: unknown =
           await request.json();
+
+        if (
+          parsedBody === null ||
+          typeof parsedBody !== "object" ||
+          Array.isArray(parsedBody)
+        ) {
+          throw new Error(
+            "Invalid registration body",
+          );
+        }
+
+        body = parsedBody as SignUpRequest;
       } catch {
         throw new AppError(
           "INVALID_REQUEST_BODY",
@@ -138,24 +185,29 @@ Deno.serve(
       }
 
       const rawPhone =
-        body.phone?.trim();
+        typeof body.phone === "string"
+          ? body.phone.trim()
+          : "";
 
       const email =
-        body.email
-          ?.trim()
-          .toLowerCase();
+        typeof body.email === "string"
+          ? body.email.trim().toLowerCase()
+          : "";
 
       const password =
-        body.password;
+        typeof body.password === "string"
+          ? body.password
+          : "";
 
       const countryCode =
-        body.country_code
-          ?.trim()
-          .toLowerCase();
+        typeof body.country_code === "string"
+          ? body.country_code.trim().toLowerCase()
+          : "";
 
       const uplinerCode =
-        body.upliner_code
-          ?.trim();
+        typeof body.upliner_code === "string"
+          ? body.upliner_code.trim()
+          : "";
 
       if (!rawPhone) {
         throw new AppError(
@@ -176,40 +228,23 @@ Deno.serve(
       }
 
       /*
-       * Public client for normal Supabase signup.
-       *
-       * Signup confirmation behaviour remains controlled
-       * by the Supabase Auth configuration.
+       * Registration does not require an existing session.
+       * Never use createSupabaseClient(request) here.
        */
       const authSupabase =
-        createSupabaseClient(
-          request,
-        );
+        createSupabaseAnonClient();
 
-      /*
-       * Service client is only used for privileged
-       * application operations after signup.
-       */
       const serviceSupabase =
         createSupabaseServiceClient();
 
       const serviceRpc =
-        asRpcClient(
-          serviceSupabase,
-        );
+        asRpcClient(serviceSupabase);
 
-      /*
-       * Resolve the country calling code from configured
-       * operational-country data.
-       */
       const callingCode =
         await fetchCountryCallingCode(
           countryCode,
         );
 
-      /*
-       * Convert the supplied phone to E.164.
-       */
       const phone =
         normalizePhoneNumber(
           rawPhone,
@@ -217,7 +252,8 @@ Deno.serve(
         );
 
       /*
-       * Allocate wallet index.
+       * Allocate the deterministic wallet index
+       * through the privileged backend client.
        */
       const {
         data: walletIndexData,
@@ -227,21 +263,9 @@ Deno.serve(
       );
 
       if (walletIndexError) {
-        console.error(
+        logRpcError(
           "SIGN_UP_WALLET_INDEX_FAILED",
-          {
-            code:
-              walletIndexError.code,
-
-            message:
-              walletIndexError.message,
-
-            details:
-              walletIndexError.details,
-
-            hint:
-              walletIndexError.hint,
-          },
+          walletIndexError,
         );
 
         throw new AppError(
@@ -251,9 +275,7 @@ Deno.serve(
       }
 
       const walletIndexValue =
-        scalarValue(
-          walletIndexData,
-        );
+        scalarValue(walletIndexData);
 
       if (!walletIndexValue) {
         throw new AppError(
@@ -262,14 +284,10 @@ Deno.serve(
       }
 
       const walletIndex =
-        Number(
-          walletIndexValue,
-        );
+        Number(walletIndexValue);
 
       if (
-        !Number.isFinite(
-          walletIndex,
-        ) ||
+        !Number.isSafeInteger(walletIndex) ||
         walletIndex <= 0
       ) {
         throw new AppError(
@@ -277,9 +295,6 @@ Deno.serve(
         );
       }
 
-      /*
-       * Derive deterministic blockchain wallet.
-       */
       const mnemonic =
         getWalletMnemonic();
 
@@ -290,23 +305,15 @@ Deno.serve(
         walletIndex,
       );
 
-      /*
-       * Generate referral code.
-       */
       const referralCode =
         await createUniqueReferralCode();
 
       /*
-       * Normal Supabase signup.
+       * Supabase still controls normal email/SMS
+       * confirmation behavior.
        *
-       * When email exists:
-       *   email + password is the signup identity.
-       *
-       * When email does not exist:
-       *   phone + password is the signup identity.
-       *
-       * This preserves Supabase's normal confirmation
-       * behaviour for whichever identifier performs signup.
+       * The random attempt ID is captured by the
+       * database trigger only when Auth inserts a user.
        */
       const {
         data: authData,
@@ -315,12 +322,22 @@ Deno.serve(
         ? await authSupabase.auth.signUp({
             email,
             password,
+            options: {
+              data: {
+                ngoda_registration_attempt:
+                  registrationAttemptId,
+              },
+            },
           })
         : await authSupabase.auth.signUp({
             phone,
             password,
             options: {
               channel: "sms",
+              data: {
+                ngoda_registration_attempt:
+                  registrationAttemptId,
+              },
             },
           });
 
@@ -328,14 +345,8 @@ Deno.serve(
         console.error(
           "SIGN_UP_AUTH_FAILED",
           {
-            phone,
-            email,
-
-            message:
-              authError.message,
-
-            status:
-              authError.status,
+            message: authError.message,
+            status: authError.status,
           },
         );
 
@@ -352,139 +363,81 @@ Deno.serve(
         );
       }
 
+      /*
+       * A returned Auth user alone is not proof that
+       * this request created the account.
+       *
+       * Verify against the private INSERT-time record
+       * before performing any admin update or cleanup.
+       */
+      const {
+        data: creationProven,
+        error: proofError,
+      } = await serviceRpc.rpc(
+        "verify_registration_auth_creation",
+        {
+          p_user_id:
+            authData.user.id,
+
+          p_attempt_id:
+            registrationAttemptId,
+        },
+      );
+
+      if (proofError) {
+        logRpcError(
+          "SIGN_UP_CREATION_PROOF_FAILED",
+          proofError,
+        );
+
+        throw new AppError(
+          "REGISTRATION_NOT_COMPLETED",
+        );
+      }
+
+      if (creationProven !== true) {
+        throw new AppError(
+          "REGISTRATION_NOT_COMPLETED",
+        );
+      }
+
       authUserId =
         authData.user.id;
 
       /*
-       * When signup used email, attach the mandatory
-       * phone to the SAME Supabase Auth user.
+       * Apply required application metadata before
+       * committing the application profile.
        *
-       * Phone-only signup already has the phone.
-       */
-      if (email) {
-        const {
-          error: phoneUpdateError,
-        } =
-          await serviceSupabase.auth.admin
-            .updateUserById(
-              authUserId,
-              {
-                phone,
-              },
-            );
-
-        if (phoneUpdateError) {
-          console.error(
-            "SIGN_UP_PHONE_UPDATE_FAILED",
-            {
-              authUserId,
-              phone,
-
-              message:
-                phoneUpdateError.message,
-
-              status:
-                phoneUpdateError.status,
-            },
-          );
-
-          throw new AppError(
-            phoneUpdateError.message ||
-              "AUTH_PHONE_UPDATE_FAILED",
-          );
-        }
-      }
-
-      /*
-       * Create the application profile.
-       *
-       * public.users remains profile/application data;
-       * authentication remains entirely in Supabase Auth.
-       */
-      const {
-        data: profileData,
-        error: profileError,
-      } = await serviceRpc.rpc(
-        "create_customer_profile",
-        {
-          p_user_id:
-            authUserId,
-
-          p_country_code:
-            countryCode,
-
-          p_phone:
-            phone,
-
-          p_email:
-            email ?? null,
-
-          p_wallet_address:
-            address,
-
-          p_wallet_index:
-            walletIndex,
-
-          p_referral_code:
-            referralCode,
-
-          p_upliner_code:
-            uplinerCode ?? null,
-        },
-      );
-
-      if (profileError) {
-        console.error(
-          "SIGN_UP_PROFILE_FAILED",
-          {
-            code:
-              profileError.code,
-
-            message:
-              profileError.message,
-
-            details:
-              profileError.details,
-
-            hint:
-              profileError.hint,
-
-            authUserId,
-          },
-        );
-
-        throw new AppError(
-          profileError.message ||
-            "USER_PROFILE_CREATE_FAILED",
-        );
-      }
-
-      profileCreated =
-        true;
-
-      /*
-       * Add application metadata only after the
-       * application profile has been created.
+       * Preserve Supabase provider metadata.
+       * Do not mark the supplied phone as confirmed.
        */
       const {
         error: metadataError,
-      } =
-        await serviceSupabase.auth.admin
-          .updateUserById(
-            authUserId,
-            {
-              app_metadata: {
-                role:
-                  Role.customer,
+      } = await serviceSupabase.auth.admin
+        .updateUserById(
+          authUserId,
+          {
+            ...(email ? { phone } : {}),
 
-                country_code:
-                  countryCode,
+            app_metadata: {
+              ...authData.user.app_metadata,
 
-                wallet_index:
-                  walletIndex,
-              },
+              role:
+                Role.customer,
+
+              country_code:
+                countryCode,
+
+              wallet_index:
+                walletIndex,
+
+              email:
+                authData.user.email ||
+                email ||
+                null,
             },
-          );
+          },
+        );
 
       if (metadataError) {
         console.error(
@@ -501,18 +454,81 @@ Deno.serve(
         );
 
         throw new AppError(
-          metadataError.message ||
-            "AUTH_METADATA_UPDATE_FAILED",
+          "AUTH_METADATA_UPDATE_FAILED",
         );
       }
+
+      /*
+       * Create the application profile only after
+       * required Auth metadata has been saved.
+       */
+      profileRequestStarted = true;
+
+      const {
+        data: profileData,
+        error: profileError,
+      } = await serviceRpc.rpc(
+        "create_customer_profile",
+        {
+          p_user_id:
+            authUserId,
+
+          p_country_code:
+            countryCode,
+
+          p_phone:
+            phone,
+
+          p_email:
+            email || null,
+
+          p_wallet_address:
+            address,
+
+          p_wallet_index:
+            walletIndex,
+
+          p_referral_code:
+            referralCode,
+
+          p_upliner_code:
+            uplinerCode || null,
+        },
+      );
+
+      if (profileError) {
+        /*
+         * Known PostgreSQL statement errors establish
+         * that the profile RPC rolled back.
+         *
+         * Transport or unknown errors do not establish
+         * whether the profile transaction committed.
+         */
+        profileRollbackConfirmed =
+          PROFILE_ROLLBACK_ERROR_CODES.has(
+            profileError.code ?? "",
+          );
+
+        logRpcError(
+          "SIGN_UP_PROFILE_FAILED",
+          profileError,
+        );
+
+        throw new AppError(
+          profileError.message ||
+            "USER_PROFILE_CREATE_FAILED",
+        );
+      }
+
+      profileCreated = true;
 
       return successResponse({
         user: {
           id:
-            authData.user.id,
+            authUserId,
 
           email:
-            email ?? null,
+            email || null,
 
           phone,
 
@@ -532,41 +548,78 @@ Deno.serve(
         profile:
           profileData,
 
-        /*
-         * With normal signUp(), session being null tells
-         * the frontend that Supabase is waiting for the
-         * configured confirmation flow.
-         */
         requires_verification:
           authData.session == null,
       });
     } catch (error) {
       /*
-       * If Auth was created but registration failed,
-       * remove the Auth user.
-       *
-       * If your profile RPC has already committed, don't
-       * silently leave public.users behind. Ideally the
-       * profile RPC should have a matching cleanup RPC,
-       * or metadata should be applied before profile
-       * creation depending on which failure semantics you
-       * want.
+       * Cleanup is permitted only for a proven new
+       * account when the profile has not committed.
        */
-      if (
-        authUserId &&
-        !profileCreated
-      ) {
+      const cleanupPermitted =
+        authUserId !== null &&
+        !profileCreated &&
+        (
+          !profileRequestStarted ||
+          profileRollbackConfirmed
+        );
+
+      if (cleanupPermitted && authUserId) {
         try {
           const serviceSupabase =
             createSupabaseServiceClient();
 
-          await serviceSupabase.auth.admin
-            .deleteUser(
-              authUserId,
+          /*
+           * Do not delete Auth if a profile exists
+           * or if its existence cannot be checked.
+           */
+          const {
+            data: existingProfile,
+            error: lookupError,
+          } = await serviceSupabase
+            .from("users")
+            .select("id")
+            .eq("id", authUserId)
+            .maybeSingle();
+
+          if (lookupError) {
+            console.error(
+              "SIGN_UP_AUTH_CLEANUP_DEFERRED",
+              {
+                authUserId,
+
+                message:
+                  lookupError.message,
+              },
             );
-        } catch (
-          cleanupError
-        ) {
+          } else if (existingProfile) {
+            console.warn(
+              "SIGN_UP_PROFILE_ALREADY_COMMITTED",
+              {
+                authUserId,
+              },
+            );
+          } else {
+            const {
+              error: cleanupError,
+            } = await serviceSupabase.auth.admin
+              .deleteUser(
+                authUserId,
+              );
+
+            if (cleanupError) {
+              console.error(
+                "SIGN_UP_AUTH_CLEANUP_FAILED",
+                {
+                  authUserId,
+
+                  message:
+                    cleanupError.message,
+                },
+              );
+            }
+          }
+        } catch (cleanupError) {
           console.error(
             "SIGN_UP_AUTH_CLEANUP_FAILED",
             {
@@ -575,12 +628,29 @@ Deno.serve(
               error:
                 cleanupError instanceof Error
                   ? cleanupError.message
-                  : String(
-                    cleanupError,
-                  ),
+                  : String(cleanupError),
             },
           );
         }
+      }
+
+      /*
+       * If the profile response was lost, its database
+       * transaction may already have committed.
+       * Preserve Auth and flag the account for checking.
+       */
+      if (
+        authUserId &&
+        !profileCreated &&
+        profileRequestStarted &&
+        !profileRollbackConfirmed
+      ) {
+        console.error(
+          "SIGN_UP_RECONCILIATION_REQUIRED",
+          {
+            authUserId,
+          },
+        );
       }
 
       console.error(

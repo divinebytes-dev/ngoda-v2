@@ -39,34 +39,71 @@ class _SetupPinScreenState extends ConsumerState<SetupPinScreen> {
 
     HapticFeedback.lightImpact();
 
+    if (!isConfirming) {
+      setState(() {
+        error = null;
+        firstEntry += value;
+      });
+
+      if (firstEntry.length == _pinLength) {
+        Future.delayed(const Duration(milliseconds: 180), () {
+          if (!mounted || isSaving) return;
+
+          setState(() {
+            isConfirming = true;
+            confirmEntry = '';
+          });
+        });
+      }
+
+      return;
+    }
+
     setState(() {
       error = null;
-
-      if (!isConfirming) {
-        firstEntry += value;
-
-        if (firstEntry.length == _pinLength) {
-          Future.delayed(const Duration(milliseconds: 180), () {
-            if (!mounted) {
-              return;
-            }
-
-            setState(() {
-              isConfirming = true;
-            });
-          });
-        }
-
-        return;
-      }
-
       confirmEntry += value;
-
-      if (confirmEntry.length == _pinLength) {
-        Future.microtask(_savePin);
-      }
     });
+
+    if (confirmEntry.length == _pinLength) {
+      _savePin();
+    }
   }
+
+  // void _onKeyTap(String value) {
+  //   if (isSaving || currentInput.length >= _pinLength) {
+  //     return;
+  //   }
+
+  //   HapticFeedback.lightImpact();
+
+  //   setState(() {
+  //     error = null;
+
+  //     if (!isConfirming) {
+  //       firstEntry += value;
+
+  //       if (firstEntry.length == _pinLength) {
+  //         Future.delayed(const Duration(milliseconds: 180), () {
+  //           if (!mounted) {
+  //             return;
+  //           }
+
+  //           setState(() {
+  //             isConfirming = true;
+  //           });
+  //         });
+  //       }
+
+  //       return;
+  //     }
+
+  //     confirmEntry += value;
+
+  //     if (confirmEntry.length == _pinLength) {
+  //       Future.microtask(_savePin);
+  //     }
+  //   });
+  // }
 
   void _onDelete() {
     if (isSaving) {

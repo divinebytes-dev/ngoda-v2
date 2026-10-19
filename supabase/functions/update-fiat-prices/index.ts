@@ -56,22 +56,26 @@ function extractPrice(
   responseData: FiatPriceApiResponse,
   currencyCode: string,
 ): string {
-  const rawAmount = responseData.data?.amount;
+  const rawAmount = responseData?.data?.amount;
 
-  if (rawAmount == null) {
+  if (
+    typeof rawAmount !== "string" &&
+    typeof rawAmount !== "number"
+  ) {
     throw new Error(
       `INVALID_PRICE_RESPONSE_${currencyCode}`,
     );
   }
 
   /*
-   * Preserve the original decimal representation.
-   * PostgreSQL numeric accepts decimal values as strings.
+   * Preserve the API's decimal representation.
+   * PostgreSQL numeric accepts the value as a string.
    */
-  const price = String(rawAmount);
+  const price = String(rawAmount).trim();
   const numericPrice = Number(price);
 
   if (
+    !price ||
     !Number.isFinite(numericPrice) ||
     numericPrice <= 0
   ) {
@@ -88,25 +92,22 @@ async function updateCurrencyRate(
   currency: FiatCurrency,
 ): Promise<FiatCurrencyUpdate> {
   const currencyCode =
-    currency.currency_code.toLowerCase();
+    currency.currency_code.trim().toLowerCase();
 
   /*
-   * USD is the base currency.
-   * Its rate to USD is always 1, so it must not
-   * be fetched from an external rate API.
+   * The SQL fetch function manages USD at 1.
+   * This guard prevents an external USD API request.
    */
   if (currencyCode === BASE_CURRENCY) {
-    console.log(
-      `Skipping ${currencyCode}: base currency`,
-    );
-
     return {
       currency: currencyCode,
       status: "skipped",
     };
   }
 
-  if (!currency.rate_api) {
+  const rateApi = currency.rate_api?.trim();
+
+  if (!rateApi) {
     console.log(
       `Skipping ${currencyCode}: rate_api is missing`,
     );
@@ -118,7 +119,7 @@ async function updateCurrencyRate(
   }
 
   const response = await fetch(
-    currency.rate_api,
+    rateApi,
     {
       method: "GET",
       headers: {
@@ -144,35 +145,32 @@ async function updateCurrencyRate(
     currencyCode,
   );
 
+  /*
+   * The SQL function:
+   * - Requires service_role.
+   * - Rechecks that the currency is active fiat.
+   * - Validates the rate.
+   * - Inserts missing rows or updates existing rows.
+   */
   const {
-    data: updatedRate,
     error: updateError,
-  } = await supabase
-    .from("current_rates")
-    .update({
+  } = await supabase.rpc(
+    "upsert_fiat_currency_rate",
+    {
+      p_currency_code: currencyCode,
+
       /*
-       * PostgreSQL numeric values can be sent as strings.
-       * The cast is required when generated Supabase types
-       * represent the column as a number.
+       * This TypeScript cast does not convert the value.
+       * The decimal string is sent to PostgreSQL numeric.
        */
-      rate_to_usd:
+      p_rate_to_usd:
         price as unknown as number,
-      updated_at:
-        new Date().toISOString(),
-    })
-    .eq("code", currencyCode)
-    .select("code")
-    .maybeSingle();
+    },
+  );
 
   if (updateError) {
     throw new Error(
       `PRICE_UPDATE_FAILED_${currencyCode}_${updateError.message}`,
-    );
-  }
-
-  if (!updatedRate) {
-    throw new Error(
-      `CURRENT_RATE_NOT_FOUND_${currencyCode}`,
     );
   }
 
@@ -192,18 +190,16 @@ async function fetchFiatPrices():
   const supabase =
     createSupabaseServiceClient();
 
+  /*
+   * Returns active fiat currencies excluding USD.
+   * Also initializes/maintains active USD at rate 1.
+   */
   const {
     data: fiatCurrencyData,
     error: currencyError,
-  } = await supabase
-    .from("supported_currency")
-    .select("currency_code, rate_api")
-    .eq("is_active", true)
-    .eq("currency_category", "fiat")
-    /*
-     * USD is the base currency and is not fetched.
-     */
-    .neq("currency_code", BASE_CURRENCY);
+  } = await supabase.rpc(
+    "fetch_fiat_price_update_currencies",
+  );
 
   if (currencyError) {
     throw new Error(
@@ -211,20 +207,14 @@ async function fetchFiatPrices():
     );
   }
 
-  /*
-   * Cast the query result before map so the callback
-   * parameter is inferred as FiatCurrency instead of any.
-   */
   const currencyRows =
     (fiatCurrencyData ?? []) as FiatCurrency[];
 
   const currencies: FiatCurrency[] =
     currencyRows.map(
-      (
-        currency: FiatCurrency,
-      ): FiatCurrency => ({
+      (currency: FiatCurrency): FiatCurrency => ({
         currency_code:
-          currency.currency_code.toLowerCase(),
+          currency.currency_code.trim().toLowerCase(),
         rate_api: currency.rate_api,
       }),
     );
@@ -233,23 +223,16 @@ async function fetchFiatPrices():
     `Found ${currencies.length} fiat currencies to update`,
   );
 
-  const updateTasks:
-    Promise<FiatCurrencyUpdate>[] =
+  const settledResults =
+    await Promise.allSettled(
       currencies.map(
-        (
-          currency: FiatCurrency,
-        ): Promise<FiatCurrencyUpdate> =>
+        (currency) =>
           updateCurrencyRate(
             supabase,
             currency,
           ),
-      );
-
-  const settledResults:
-    PromiseSettledResult<FiatCurrencyUpdate>[] =
-      await Promise.allSettled(
-        updateTasks,
-      );
+      ),
+    );
 
   const result: FiatPriceResult = {
     updated: [],
@@ -262,19 +245,8 @@ async function fetchFiatPrices():
     index < settledResults.length;
     index++
   ) {
-    const settledItem =
-      settledResults[index];
-
-    const currency =
-      currencies[index];
-
-    if (!currency) {
-      console.error(
-        `Missing currency for result index ${index}`,
-      );
-
-      continue;
-    }
+    const currency = currencies[index]!;
+    const settledItem = settledResults[index]!;
 
     if (settledItem.status === "rejected") {
       const errorMessage =
@@ -288,18 +260,14 @@ async function fetchFiatPrices():
       );
 
       result.failed.push({
-        currency:
-          currency.currency_code,
+        currency: currency.currency_code,
         error: errorMessage,
       });
 
       continue;
     }
 
-    if (
-      settledItem.value.status ===
-        "updated"
-    ) {
+    if (settledItem.value.status === "updated") {
       result.updated.push(
         settledItem.value.currency,
       );
@@ -328,9 +296,7 @@ Deno.serve(
     }
 
     const configuredSecret =
-      Deno.env.get(
-        "FIAT_PRICE_CRON_SECRET",
-      );
+      Deno.env.get("FIAT_PRICE_CRON_SECRET");
 
     if (!configuredSecret) {
       console.error(
@@ -340,17 +306,14 @@ Deno.serve(
       return jsonResponse(
         {
           success: false,
-          message:
-            "CRON_CONFIGURATION_MISSING",
+          message: "CRON_CONFIGURATION_MISSING",
         },
         500,
       );
     }
 
     const suppliedSecret =
-      request.headers.get(
-        "x-cron-secret",
-      );
+      request.headers.get("x-cron-secret");
 
     if (
       !suppliedSecret ||
@@ -374,8 +337,7 @@ Deno.serve(
         "Starting scheduled fiat price update",
       );
 
-      const result =
-        await fetchFiatPrices();
+      const result = await fetchFiatPrices();
 
       if (result.failed.length > 0) {
         console.error(
@@ -386,11 +348,9 @@ Deno.serve(
         return jsonResponse(
           {
             success: false,
-            message:
-              "FIAT_PRICE_UPDATE_PARTIAL_FAILURE",
+            message: "FIAT_PRICE_UPDATE_PARTIAL_FAILURE",
             result,
-            processed_at:
-              new Date().toISOString(),
+            processed_at: new Date().toISOString(),
           },
           500,
         );
@@ -405,8 +365,7 @@ Deno.serve(
         {
           success: true,
           result,
-          processed_at:
-            new Date().toISOString(),
+          processed_at: new Date().toISOString(),
         },
         200,
       );
@@ -424,8 +383,7 @@ Deno.serve(
       return jsonResponse(
         {
           success: false,
-          message:
-            "PRICE_UPDATE_FAIL",
+          message: "PRICE_UPDATE_FAIL",
           error: errorMessage,
         },
         500,

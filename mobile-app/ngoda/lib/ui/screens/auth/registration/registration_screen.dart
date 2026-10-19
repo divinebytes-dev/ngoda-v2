@@ -11,8 +11,8 @@ import 'package:ngoda/ui/screens/auth/providers/auth_provider.dart';
 import 'package:ngoda/ui/screens/auth/providers/supported_countries_provider.dart';
 import 'package:ngoda/ui/shared/app_text_styles.dart';
 import 'package:ngoda/ui/widgets/app_button.dart';
-import 'package:ngoda/ui/widgets/app_dropdown_field.dart';
 import 'package:ngoda/ui/widgets/app_logo.dart';
+import 'package:ngoda/ui/widgets/app_search_dropdown_field.dart';
 import 'package:ngoda/ui/widgets/app_state_view.dart';
 import 'package:ngoda/ui/widgets/input_field.dart';
 
@@ -201,20 +201,24 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         SizedBox(height: spacing.sm),
 
                         if (countryResponse?.result != null)
-                          AppDropdownField<SupportedCountry>(
-                            selected: state.country,
-                            values: countryResponse!.result!,
-                            hint: 'Select country',
-                            labelBuilder: (country) {
-                              return country.name;
-                            },
-                            onSelect: state.isLoading
-                                ? null
-                                : (country) {
-                                    ref
-                                        .read(authProvider.notifier)
-                                        .updateCountry(country);
-                                  },
+                          AbsorbPointer(
+                            absorbing: state.isLoading,
+                            child: AppSearchDropdownField<SupportedCountry>(
+                              selected: state.country,
+                              values: countryResponse!.result!,
+                              hint: 'Select country',
+                              displayText: (country) => country.name,
+                              filter: (country, query) {
+                                return country.name.toLowerCase().contains(
+                                  query,
+                                );
+                              },
+                              onSelect: (country) {
+                                ref
+                                    .read(authProvider.notifier)
+                                    .updateCountry(country);
+                              },
+                            ),
                           ),
 
                         if (state.error != null) ...[

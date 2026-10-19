@@ -2,37 +2,29 @@ import { formatUnits } from "ethers";
 import type {
   SupportedBlockchainConfig,
 } from "../../_shared/types/supported_blockchain_config.ts";
-
 import {
   errorResponse,
   successResponse,
 } from "../../_shared/api-response.ts";
-
 import {
-  createSupabaseClient,
+  authenticateRequest,
+  createSupabaseServiceClient,
 } from "../../_shared/supabase-client.ts";
-
 import {
   AppError,
 } from "../../_shared/app-error.ts";
-
 import {
   TransactionData,
   TransactionVerificationService,
 } from "../../_shared/transaction-verification-service.ts";
-
 import {
   getBlockchainWalletBalances,
 } from "../../_shared/blockchain/balances.ts";
-
-
 type AdditionalCollateralContext = {
   user_id: string;
   country_code: string;
   user_wallet_address: string;
 };
-
-
 type AdditionalCollateralResult = {
   success: boolean;
   collateral_required: boolean;
@@ -44,8 +36,6 @@ type AdditionalCollateralResult = {
   new_locked_collateral: string;
   loans_adjusted: number;
 };
-
-
 Deno.serve(async (request: Request) => {
   try {
     /*
@@ -59,19 +49,14 @@ Deno.serve(async (request: Request) => {
         405,
       );
     }
-
-
     /*
      * ======================================================
      * AUTHENTICATED CLIENT
      * ======================================================
      */
-    const authSupabase =
-      createSupabaseClient(
-        request,
-      );
-
-
+    const { supabase: authSupabase, userId } =
+      await authenticateRequest(request);
+    const postingSupabase = createSupabaseServiceClient();
     /*
      * ======================================================
      * REQUEST BODY
@@ -89,8 +74,6 @@ Deno.serve(async (request: Request) => {
     let body: {
       transaction?: TransactionData;
     };
-
-
     try {
       body =
         await request.json();
@@ -100,16 +83,11 @@ Deno.serve(async (request: Request) => {
         400,
       );
     }
-
-
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       throw new AppError("INVALID_REQUEST_BODY", 400);
     }
-
     const transaction =
       body.transaction;
-
-
     if (!transaction || typeof transaction !== "object" ||
         Array.isArray(transaction)) {
       throw new AppError(
@@ -117,8 +95,6 @@ Deno.serve(async (request: Request) => {
         400,
       );
     }
-
-
     /*
      * ======================================================
      * TRUSTED USER CONTEXT
@@ -136,69 +112,53 @@ Deno.serve(async (request: Request) => {
     } = await authSupabase.rpc(
       "fetch_my_additional_collateral_context",
     );
-
-
     if (contextError) {
       console.error(
         "ADDITIONAL_COLLATERAL_CONTEXT_FAILED",
         {
           code:
             contextError.code,
-
           message:
             contextError.message,
-
           details:
             contextError.details,
-
           hint:
             contextError.hint,
         },
       );
-
-
       throw new AppError(
         contextError.message ||
           "ADDITIONAL_COLLATERAL_CONTEXT_FAILED",
       );
     }
-
-
     const context =
       (
         contextRows as unknown as
           AdditionalCollateralContext[] | null
       )?.[0];
-
-
     if (!context) {
       throw new AppError(
         "ADDITIONAL_COLLATERAL_CONTEXT_NOT_FOUND",
       );
     }
-
-
     if (!context.user_id) {
       throw new AppError(
         "USER_NOT_FOUND",
       );
     }
-
-
+    if (context.user_id !== userId) {
+      throw new AppError("COLLATERAL_CONTEXT_USER_MISMATCH");
+    }
     if (!context.country_code) {
       throw new AppError(
         "USER_COUNTRY_NOT_CONFIGURED",
       );
     }
-
-
     if (!context.user_wallet_address) {
       throw new AppError(
         "USER_WALLET_ADDRESS_NOT_FOUND",
       );
     }
-
-
     /*
      * ======================================================
      * VERIFY USER SIGNATURE
@@ -217,15 +177,11 @@ Deno.serve(async (request: Request) => {
           transaction,
           context.user_wallet_address,
         );
-
-
     if (!signatureValid) {
       throw new AppError(
         "TRANSACTION_SIGNATURE_VERIFICATION_FAILED",
       );
     }
-
-
     /*
      * ======================================================
      * VALIDATE TRANSACTION STRUCTURE
@@ -240,8 +196,6 @@ Deno.serve(async (request: Request) => {
       .validateTransactionFields(
         transaction,
       );
-
-
     /*
      * ======================================================
      * CURRENCY
@@ -253,15 +207,11 @@ Deno.serve(async (request: Request) => {
       )
         .trim()
         .toLowerCase();
-
-
     if (currency !== "gold") {
       throw new AppError(
         "INVALID_COLLATERAL_CURRENCY",
       );
     }
-
-
     /*
      * ======================================================
      * SIGNED COLLATERAL AMOUNT
@@ -284,8 +234,6 @@ Deno.serve(async (request: Request) => {
       Number(
         transaction.a,
       );
-
-
     if (
       !Number.isSafeInteger(
         signedAmount,
@@ -296,12 +244,9 @@ Deno.serve(async (request: Request) => {
         "INVALID_COLLATERAL_AMOUNT",
       );
     }
-
-
     // Preserve the existing signed convention: transaction.a / 100 grams.
     // Convert with integer arithmetic after signature verification.
     const requestedCollateralText = formatUnits(BigInt(signedAmount), 2);
-
     /*
      * ======================================================
      * REFERENCE
@@ -311,15 +256,11 @@ Deno.serve(async (request: Request) => {
       String(
         transaction.r,
       ).trim();
-
-
     if (!reference) {
       throw new AppError(
         "REFERENCE_REQUIRED",
       );
     }
-
-
     /*
      * ======================================================
      * BLOCKCHAIN GOLD BALANCE
@@ -332,14 +273,12 @@ Deno.serve(async (request: Request) => {
      */
       const { data: configData, error: configError } =
         await authSupabase.rpc("fetch_active_supported_blockchains");
-
       if (configError) {
         throw new AppError(configError.message || "ADDITIONAL_COLLATERAL_BLOCKCHAIN_CONFIG_FAILED");
       }
-      if (!Array.isArray(configData)) {
+      if (!Array.isArray(configData) || configData.length === 0) {
         throw new AppError("INVALID_LOAN_BLOCKCHAIN_CONFIG");
       }
-
       const codes = new Set<string>();
       let totalGoldUnits = 0n;
       for (const rawConfig of configData) {
@@ -358,7 +297,6 @@ Deno.serve(async (request: Request) => {
           ...rawConfig,
           chain_id: chainId,
         } as SupportedBlockchainConfig;
-
         // Read every active chain. Any failed read stops the top-up.
         const balances = await getBlockchainWalletBalances(
           blockchain,
@@ -377,7 +315,6 @@ Deno.serve(async (request: Request) => {
         totalGoldUnits += onChainUnits;
       }
       const tokenBalance = formatUnits(totalGoldUnits, 6);
-
     /*
      * ======================================================
      * EXECUTE COLLATERAL ALLOCATION
@@ -397,56 +334,44 @@ Deno.serve(async (request: Request) => {
     const {
       data,
       error: collateralError,
-    } = await authSupabase.rpc(
-      "execute_my_additional_collateral",
+    } = await postingSupabase.rpc(
+      "execute_additional_collateral",
       {
+        p_user_id: userId,
         p_requested_collateral:
           requestedCollateralText,
-
         p_token_balance:
           tokenBalance.trim(),
-
         p_reference:
           reference,
       },
     );
-
     if (collateralError) {
       console.error(
         "ADDITIONAL_COLLATERAL_FAILED",
         {
           code:
             collateralError.code,
-
           message:
             collateralError.message,
-
           details:
             collateralError.details,
-
           hint:
             collateralError.hint,
-
           userId:
             context.user_id,
-
           reference,
-
           requestedCollateral:
             requestedCollateralText,
-
           tokenBalance:
             tokenBalance.trim(),
         },
       );
-
-
       if (collateralError.message.includes(
         "LOAN_POSITION_LIQUIDATION_IN_PROGRESS",
       )) {
         throw new AppError("LOAN_POSITION_LIQUIDATION_IN_PROGRESS", 409);
       }
-
       if (
         collateralError.code === "23505" ||
         collateralError.message.includes(
@@ -458,17 +383,13 @@ Deno.serve(async (request: Request) => {
           409,
         );
       }
-
-
       throw new AppError(
         collateralError.message ||
           "ADDITIONAL_COLLATERAL_FAILED",
       );
     }
-
-
     /*
-     * execute_my_additional_collateral RETURNS TABLE,
+     * execute_additional_collateral RETURNS TABLE,
      * therefore Supabase returns an array.
      */
     const result =
@@ -476,22 +397,16 @@ Deno.serve(async (request: Request) => {
         data as unknown as
           AdditionalCollateralResult[] | null
       )?.[0];
-
-
     if (!result) {
       throw new AppError(
         "ADDITIONAL_COLLATERAL_RESULT_NOT_FOUND",
       );
     }
-
-
     if (!result.success) {
       throw new AppError(
         "ADDITIONAL_COLLATERAL_FAILED",
       );
     }
-
-
     /*
      * ======================================================
      * RESPONSE
@@ -504,36 +419,26 @@ Deno.serve(async (request: Request) => {
     return successResponse({
       success:
         result.success,
-
       reference,
-
       currency:
         "gold",
-
       collateral_required:
         result.collateral_required,
-
       requested_collateral:
         result.requested_collateral,
-
       collateral_added:
         result.collateral_added,
-
       unused_collateral:
         result.unused_collateral,
-
       remaining_required_collateral:
         result
           .remaining_required_collateral,
-
       previous_locked_collateral:
         result
           .previous_locked_collateral,
-
       new_locked_collateral:
         result
           .new_locked_collateral,
-
       loans_adjusted:
         result.loans_adjusted,
     });

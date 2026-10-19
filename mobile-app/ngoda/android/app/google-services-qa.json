@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "555972924149",
+    "project_id": "ngoda-wallet-qa",
+    "storage_bucket": "ngoda-wallet-qa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:555972924149:android:4d7127b988d1e68b67abbc",
+        "android_client_info": {
+          "package_name": "com.divinebytes.ngoda"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_VY8E1cu_fWECPBERbwJAXRrei4Kl1hU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
