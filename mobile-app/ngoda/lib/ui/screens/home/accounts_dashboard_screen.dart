@@ -337,6 +337,7 @@ class DynamicMetricCard extends StatelessWidget {
             return Padding(
               padding: EdgeInsets.only(bottom: spacing.sm),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Text(
@@ -346,14 +347,30 @@ class DynamicMetricCard extends StatelessWidget {
                       ).copyWith(color: colorScheme.onSurfaceVariant),
                     ),
                   ),
-                  Text(
-                    NumberFormatService.formatAmount(
-                      entry.value.balance,
-                      currency: entry.key,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          NumberFormatService.formatAmount(
+                            entry.value.balance,
+                            currency: entry.key,
+                          ),
+                          textAlign: TextAlign.right,
+                          style: AppTextStyles.smallNumber(
+                            context,
+                          ).copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        SizedBox(height: spacing.xs),
+                        Text(
+                          '≈ ${NumberFormatService.formatAmount(entry.value.usdValue, currency: 'usd')}',
+                          textAlign: TextAlign.right,
+                          style: AppTextStyles.tiny(
+                            context,
+                          ).copyWith(color: colorScheme.onSurfaceVariant),
+                        ),
+                      ],
                     ),
-                    style: AppTextStyles.smallNumber(
-                      context,
-                    ).copyWith(fontWeight: FontWeight.w600),
                   ),
                 ],
               ),

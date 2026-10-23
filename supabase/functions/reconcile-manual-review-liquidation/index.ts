@@ -1,5 +1,8 @@
 import {
   getAddress,
+  Interface,
+  parseUnits,
+  type Log,
 } from "ethers";
 
 import {
@@ -12,8 +15,7 @@ import {
 } from "../../_shared/app-error.ts";
 
 import {
-  blockchainConfig,
-  relayerContract,
+  createBlockchainReadClient,
 } from "../../_shared/blockchain/client.ts";
 
 import {
@@ -30,6 +32,7 @@ type ReconciliationRequest = {
 
 
 type LiquidationReconciliationContext = {
+  blockchain_code: string;
   queue_id: string;
   liquidation_job_id: string;
   job_status: string;
@@ -317,6 +320,7 @@ function parseContext(
     value as Record<string, unknown>;
 
   return {
+    blockchain_code: requiredString(context.blockchain_code, "LIQUIDATION_BLOCKCHAIN_CODE_REQUIRED"),
     queue_id:
       requiredString(
         context.queue_id,
@@ -384,35 +388,20 @@ function parseContext(
 }
 
 
-function buildExplorerUrl(
-  txHash: string,
-): string | null {
-  const configuredUrl =
-    Deno.env
-      .get("CHIADO_EXPLORER")
-      ?.trim();
-
-  if (!configuredUrl) {
-    return null;
+function buildExplorerUrl(base: string, txHash: string): string {
+  const url = new URL(base);
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new AppError("INVALID_BLOCKCHAIN_EXPLORER_URL",400);
   }
-
-  const baseUrl =
-    configuredUrl.replace(
-      /\/+$/,
-      "",
-    );
-
-  if (
-    baseUrl
-      .toLowerCase()
-      .endsWith("/tx")
-  ) {
-    return `${baseUrl}/${txHash}`;
-  }
-
-  return `${baseUrl}/tx/${txHash}`;
+  const normalized=base.replace(/\/+$/, "");
+  return normalized.toLowerCase().endsWith("/tx")
+    ? `${normalized}/${txHash}` : `${normalized}/tx/${txHash}`;
 }
 
+function isRecoverableManualReviewState(jobStatus: string, queueStatus: string): boolean {
+  return ["pending","blockchain_processing","failed"].includes(jobStatus)
+    && ["pending","processing","failed"].includes(queueStatus);
+}
 
 Deno.serve(async (request: Request) => {
   try {
@@ -522,10 +511,7 @@ Deno.serve(async (request: Request) => {
     }
 
     if (
-      context.job_status !==
-        "blockchain_processing" ||
-      context.queue_status !==
-        "processing"
+      !isRecoverableManualReviewState(context.job_status,context.queue_status)
     ) {
       throw new AppError(
         "INVALID_LIQUIDATION_MANUAL_REVIEW_STATE",
@@ -589,17 +575,41 @@ Deno.serve(async (request: Request) => {
       );
     }
 
-    const provider =
-      relayerContract
-        .runner
-        ?.provider;
-
-    if (!provider) {
-      throw new AppError(
-        "BLOCKCHAIN_PROVIDER_NOT_CONFIGURED",
-      );
+    // Resolve the exact saved chain/contract through the existing queue-aware RPC.
+    const {data: configRows,error: configError}=await serviceSupabase.rpc(
+      "fetch_liquidation_blockchain_config",{p_queue_id:context.queue_id},
+    );
+    if (configError) throw new AppError(configError.message,400);
+    if (!Array.isArray(configRows) || configRows.length!==1) {
+      throw new AppError("INVALID_LIQUIDATION_BLOCKCHAIN_CONFIG_RESPONSE",400);
     }
-
+    const config=configRows[0] as Record<string,unknown>;
+    const code=requiredString(config.code,"LIQUIDATION_BLOCKCHAIN_CODE_REQUIRED");
+    const chainId=Number(config.chain_id);
+    const contractAddress=getAddress(requiredString(config.contract_address,"TOKEN_CONTRACT_ADDRESS_REQUIRED"));
+    if (!Number.isSafeInteger(chainId) || chainId<=0 || code!==context.blockchain_code ||
+        context.signed_payload.blockchain_code!==code ||
+        String(context.signed_payload.chain_id)!==String(chainId) ||
+        typeof context.signed_payload.contract_address!=="string" ||
+        getAddress(context.signed_payload.contract_address)!==contractAddress) {
+      throw new AppError("LIQUIDATION_SIGNED_BLOCKCHAIN_MISMATCH",409);
+    }
+    const treasury=getAddress(requiredString(config.treasury_wallet_address,"LIQUIDATION_TREASURY_WALLET_REQUIRED"));
+    if (treasury!==signed.to) throw new AppError("LIQUIDATION_TREASURY_ADDRESS_MISMATCH",409);
+    const {provider,contract}=createBlockchainReadClient({
+      code,chain_id:chainId,rpc_url:requiredString(config.rpc_url,"BLOCKCHAIN_RPC_URL_MISSING"),
+      contract_address:contractAddress,
+      native_currency_code:requiredString(config.native_currency_code,"NATIVE_CURRENCY_CODE_REQUIRED"),
+    });
+    try {
+    if ((await provider.getNetwork()).chainId!==BigInt(chainId)) {
+      throw new AppError("LIQUIDATION_NETWORK_MISMATCH",409);
+    }
+    const decimals=Number(await contract.decimals());
+    if (!Number.isSafeInteger(decimals) || decimals<0 || decimals>255 ||
+        parseUnits(signed.amount,decimals)!==signed.parsedAmount) {
+      throw new AppError("LIQUIDATION_RAW_AMOUNT_MISMATCH",409);
+    }
     const [
       transaction,
       receipt,
@@ -635,10 +645,25 @@ Deno.serve(async (request: Request) => {
       );
     }
 
-    const relayerAddress =
-      getAddress(
-        await relayerContract.getAddress(),
-      );
+    const relayerAddress = contractAddress;
+    if (transaction.chainId!==BigInt(chainId) || transaction.value!==0n ||
+        !receipt.to || getAddress(receipt.to)!==contractAddress ||
+        receipt.hash.toLowerCase()!==txHash.toLowerCase()) {
+      throw new AppError("LIQUIDATION_TRANSACTION_NETWORK_OR_CONTRACT_MISMATCH",409);
+    }
+    const transferEvents = new Interface(["event Transfer(address indexed from,address indexed to,uint256 value)"]);
+    const events=receipt.logs.flatMap((log: Log)=>{
+      if (getAddress(log.address)!==contractAddress) return [];
+      try {
+        const event=transferEvents.parseLog({topics:[...log.topics],data:log.data});
+        return event?.name==="Transfer" ? [event] : [];
+      } catch { return []; }
+    });
+    if (events.length!==1 || getAddress(events[0].args[0].toString())!==signed.owner ||
+        getAddress(events[0].args[1].toString())!==signed.to ||
+        BigInt(events[0].args[2].toString())!==signed.parsedAmount) {
+      throw new AppError("LIQUIDATION_TRANSFER_EVENT_MISMATCH",409);
+    }
 
     if (
       getAddress(transaction.to) !==
@@ -651,7 +676,7 @@ Deno.serve(async (request: Request) => {
     }
 
     const parsedTransaction =
-      relayerContract.interface
+      contract.interface
         .parseTransaction({
           data:
             transaction.data,
@@ -717,9 +742,7 @@ Deno.serve(async (request: Request) => {
 
     if (
       decodedFeeReceiver !==
-      getAddress(
-        blockchainConfig.treasuryAddress,
-      )
+      treasury
     ) {
       throw new AppError(
         "LIQUIDATION_TRANSACTION_FEE_RECEIVER_MISMATCH",
@@ -762,7 +785,7 @@ Deno.serve(async (request: Request) => {
     }
 
     const explorerUrl =
-      buildExplorerUrl(txHash);
+      buildExplorerUrl(requiredString(config.explorer_url,"BLOCKCHAIN_EXPLORER_URL_MISSING"),txHash);
 
     const verifiedResult = {
       verified:
@@ -865,6 +888,9 @@ Deno.serve(async (request: Request) => {
       next_action:
         "WAIT_FOR_LIQUIDATION_ACCOUNTING",
     });
+    } finally {
+      provider.destroy();
+    }
   } catch (error) {
     console.error(
       "RECONCILE_MANUAL_REVIEW_LIQUIDATION_ERROR",

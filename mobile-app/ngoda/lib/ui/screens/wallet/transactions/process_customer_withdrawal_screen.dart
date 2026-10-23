@@ -353,7 +353,7 @@ class _ProcessUserWithdrawalScreenState
         return;
       }
 
-      _resetTransaction();
+      _closeScreen();
     } catch (error) {
       if (!mounted) {
         return;

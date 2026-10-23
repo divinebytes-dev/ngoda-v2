@@ -1,6 +1,7 @@
 import 'package:logging/logging.dart';
 
 import 'package:ngoda/data_models/accounts/finance_document.dart';
+import 'package:ngoda/data_models/commission/current_period_agent_commissions.dart';
 import 'package:ngoda/data_models/commission/settlement_batch_data.dart';
 import 'package:ngoda/data_models/commission/settlement_items_page.dart';
 import 'package:ngoda/data_models/fee/transaction_config.dart';
@@ -16,11 +17,14 @@ import 'package:ngoda/data_models/gl/gl_drilldown.dart';
 import 'package:ngoda/data_models/loan/liquidation/incomplete_liquidation_jobs.dart';
 import 'package:ngoda/data_models/loan/liquidation/liquidated_loans_today.dart';
 import 'package:ngoda/data_models/loan/liquidation/manual_review_liquidation.dart';
+import 'package:ngoda/data_models/params/current_commission_params.dart';
+import 'package:ngoda/data_models/params/current_tax_params.dart';
 import 'package:ngoda/data_models/params/financial_statement_params.dart';
 import 'package:ngoda/data_models/params/gl_drilldown_params.dart';
 import 'package:ngoda/data_models/params/gl_entry_params.dart';
 import 'package:ngoda/data_models/params/loan_liquidation_params.dart';
 import 'package:ngoda/data_models/params/settlement_items_params.dart';
+import 'package:ngoda/data_models/tax/current_government_tax.dart';
 import 'package:ngoda/data_models/tax/tax_settlement_batch_data.dart';
 import 'package:ngoda/data_models/tax/tax_settlement_items_page.dart';
 import 'package:ngoda/data_models/transaction/transaction_v.dart';
@@ -338,6 +342,48 @@ class FinanceApiService {
       functionName: 'update-government-tax-settlement-batch',
       body: {'batch_id': batchId, 'action': action},
     );
+  }
+
+  Future<CurrentGovernmentTax> fetchCurrentGovernmentTax(
+    CurrentTaxParams params,
+  ) async {
+    final data = await _functions.invokeData(
+      functionName: 'fetch-current-government-tax',
+      body: params.toJson(),
+    );
+
+    final result = CurrentGovernmentTax.fromJson(data);
+
+    if (result.pagination.page != params.page ||
+        result.pagination.pageSize != params.pageSize ||
+        (params.currency != null && result.currency != params.currency)) {
+      throw const FormatException(
+        'Current tax response does not match the requested page',
+      );
+    }
+
+    return result;
+  }
+
+  Future<CurrentPeriodAgentCommissions> fetchCurrentPeriodAgentCommissions(
+    CurrentCommissionParams params,
+  ) async {
+    final data = await _functions.invokeData(
+      functionName: 'fetch-current-period-agent-commission',
+      body: params.toJson(),
+    );
+
+    final result = CurrentPeriodAgentCommissions.fromJson(data);
+
+    if (result.pagination.page != params.page ||
+        result.pagination.pageSize != params.pageSize ||
+        (params.currency != null && result.currency != params.currency)) {
+      throw const FormatException(
+        'Current commission response does not match the requested page',
+      );
+    }
+
+    return result;
   }
 
   Future<LiquidatedLoansToday> fetchLiquidatedLoans(

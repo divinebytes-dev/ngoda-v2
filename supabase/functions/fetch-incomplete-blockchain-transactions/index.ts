@@ -11,118 +11,75 @@ import {
   AppError,
 } from "../../_shared/app-error.ts";
 
-
 function parsePositiveInteger(
   value: string | null,
   defaultValue: number,
   errorMessage: string,
   maximum?: number,
 ): number {
-  if (
-    value === null ||
-    value.trim() === ""
-  ) {
+  if (value === null || value.trim() === "") {
     return defaultValue;
   }
 
-  const normalizedValue =
-    value.trim();
+  const normalized = value.trim();
 
-  if (!/^\d+$/.test(normalizedValue)) {
-    throw new AppError(
-      errorMessage,
-      400,
-    );
+  if (!/^\d+$/.test(normalized)) {
+    throw new AppError(errorMessage, 400);
   }
 
-  const parsedValue =
-    Number(normalizedValue);
+  const parsed = Number(normalized);
 
   if (
-    !Number.isSafeInteger(parsedValue) ||
-    parsedValue < 1 ||
-    (
-      maximum !== undefined &&
-      parsedValue > maximum
-    )
+    !Number.isSafeInteger(parsed) ||
+    parsed < 1 ||
+    (maximum !== undefined && parsed > maximum)
   ) {
-    throw new AppError(
-      errorMessage,
-      400,
-    );
+    throw new AppError(errorMessage, 400);
   }
 
-  return parsedValue;
+  return parsed;
 }
 
-
-Deno.serve(async (request: Request) => {
+Deno.serve(async (request: Request): Promise<Response> => {
   try {
     if (request.method !== "GET") {
-      throw new AppError(
-        "METHOD_NOT_ALLOWED",
-        405,
-      );
+      throw new AppError("METHOD_NOT_ALLOWED", 405);
     }
 
-    const url =
-      new URL(request.url);
+    const url = new URL(request.url);
 
-    const page =
-      parsePositiveInteger(
-        url.searchParams.get("page"),
-        1,
-        "INVALID_PAGE",
-      );
+    const page = parsePositiveInteger(
+      url.searchParams.get("page"),
+      1,
+      "INVALID_PAGE",
+    );
 
-    const pageSize =
-      parsePositiveInteger(
-        url.searchParams.get("pageSize") ??
-          url.searchParams.get("page_size"),
-        50,
-        "INVALID_PAGE_SIZE",
-        100,
-      );
+    const pageSize = parsePositiveInteger(
+      url.searchParams.get("pageSize") ??
+        url.searchParams.get("page_size"),
+      50,
+      "INVALID_PAGE_SIZE",
+      100,
+    );
 
-    /*
-     * Use the authenticated client.
-     *
-     * PostgreSQL resolves the Accounts/Finance user and
-     * restricts the report to that user's country.
-     */
-    const supabase =
-      createSupabaseClient(request);
+    const supabase = createSupabaseClient(request);
 
-    const {
-      data,
-      error,
-    } = await supabase.rpc(
-      "fetch_my_incomplete_liquidation_jobs",
+    const { data, error } = await supabase.rpc(
+      "fetch_incomplete_blockchain_transactions",
       {
-        p_page:
-          page,
-
-        p_page_size:
-          pageSize,
+        p_page: page,
+        p_page_size: pageSize,
       },
     );
 
     if (error) {
       console.error(
-        "FETCH_INCOMPLETE_LIQUIDATION_JOBS_RPC_FAILED",
+        "FETCH_INCOMPLETE_BLOCKCHAIN_TRANSACTIONS_RPC_FAILED",
         {
-          code:
-            error.code,
-
-          message:
-            error.message,
-
-          details:
-            error.details,
-
-          hint:
-            error.hint,
-
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
           page,
           pageSize,
         },
@@ -130,42 +87,34 @@ Deno.serve(async (request: Request) => {
 
       throw new AppError(
         error.message ||
-          "FETCH_INCOMPLETE_LIQUIDATION_JOBS_FAILED",
+          "FETCH_INCOMPLETE_BLOCKCHAIN_TRANSACTIONS_FAILED",
       );
     }
 
+
+
     return successResponse(
       data ?? {
-        rows: [],
+        transactions: [],
         pagination: {
           page,
-          page_size:
-            pageSize,
-          total_entries:
-            0,
-          total_pages:
-            1,
-          has_previous:
-            page > 1,
-          has_next:
-            false,
+          page_size: pageSize,
+          total_entries: 0,
+          total_pages: 1,
+          has_previous: page > 1,
+          has_next: false,
         },
       },
     );
   } catch (error) {
     console.error(
-      "FETCH_INCOMPLETE_LIQUIDATION_JOBS_ERROR",
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : String(error),
-      },
+      "FETCH_INCOMPLETE_BLOCKCHAIN_TRANSACTIONS_ERROR",
+      error,
     );
 
     return errorResponse(
       error,
-      "FETCH_INCOMPLETE_LIQUIDATION_JOBS_FAILED",
+      "FETCH_INCOMPLETE_BLOCKCHAIN_TRANSACTIONS_FAILED",
     );
   }
 });

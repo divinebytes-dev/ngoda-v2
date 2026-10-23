@@ -10,43 +10,10 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.18"
   }
   public: {
     Tables: {
-      _prisma_migrations: {
-        Row: {
-          applied_steps_count: number
-          checksum: string
-          finished_at: string | null
-          id: string
-          logs: string | null
-          migration_name: string
-          rolled_back_at: string | null
-          started_at: string
-        }
-        Insert: {
-          applied_steps_count?: number
-          checksum: string
-          finished_at?: string | null
-          id: string
-          logs?: string | null
-          migration_name: string
-          rolled_back_at?: string | null
-          started_at?: string
-        }
-        Update: {
-          applied_steps_count?: number
-          checksum?: string
-          finished_at?: string | null
-          id?: string
-          logs?: string | null
-          migration_name?: string
-          rolled_back_at?: string | null
-          started_at?: string
-        }
-        Relationships: []
-      }
       agent_commission: {
         Row: {
           agent_id: string
@@ -130,6 +97,20 @@ export type Database = {
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_settlement_batch_fk"
+            columns: ["settlement_batch_id"]
+            isOneToOne: false
+            referencedRelation: "agent_settlement_batch"
+            referencedColumns: ["id"]
+          },
         ]
       }
       agent_fee_splitting_config: {
@@ -182,6 +163,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "supported_currency"
             referencedColumns: ["currency_code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
           },
         ]
       }
@@ -261,6 +249,13 @@ export type Database = {
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
         ]
       }
       agent_settlement_item: {
@@ -338,6 +333,13 @@ export type Database = {
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
         ]
       }
       aml_config: {
@@ -390,6 +392,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "supported_currency"
             referencedColumns: ["currency_code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
           },
         ]
       }
@@ -456,6 +465,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
           },
         ]
       }
@@ -557,6 +573,13 @@ export type Database = {
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
         ]
       }
       audit_log: {
@@ -634,6 +657,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
           },
         ]
       }
@@ -728,31 +758,21 @@ export type Database = {
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
           },
+          {
+            foreignKeyName: "ngoda_blockchain_code_fk"
+            columns: ["blockchain_code"]
+            isOneToOne: false
+            referencedRelation: "supported_blockchain"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
         ]
-      }
-      blockchains: {
-        Row: {
-          address: string
-          chain: string
-          chain_id: string
-          id: string
-          name: string
-        }
-        Insert: {
-          address: string
-          chain: string
-          chain_id: string
-          id?: string
-          name: string
-        }
-        Update: {
-          address?: string
-          chain?: string
-          chain_id?: string
-          id?: string
-          name?: string
-        }
-        Relationships: []
       }
       collateral: {
         Row: {
@@ -789,6 +809,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
           },
         ]
       }
@@ -832,7 +859,29 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_fiscal_period_fk"
+            columns: ["country_code", "fiscal_year", "period"]
+            isOneToOne: false
+            referencedRelation: "fiscal_period_config"
+            referencedColumns: ["country_code", "fiscal_year", "period"]
+          },
+          {
+            foreignKeyName: "ngoda_user_id_fk"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       collateral_entry: {
         Row: {
@@ -878,6 +927,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "loan"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
           },
         ]
       }
@@ -1000,6 +1056,20 @@ export type Database = {
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_currency_code_fk"
+            columns: ["currency_code"]
+            isOneToOne: false
+            referencedRelation: "supported_currency"
+            referencedColumns: ["currency_code"]
+          },
         ]
       }
       credit_agent_entry: {
@@ -1095,6 +1165,27 @@ export type Database = {
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_fiscal_period_fk"
+            columns: ["country_code", "fiscal_year", "period"]
+            isOneToOne: false
+            referencedRelation: "fiscal_period_config"
+            referencedColumns: ["country_code", "fiscal_year", "period"]
+          },
+          {
+            foreignKeyName: "ngoda_currency_code_fk"
+            columns: ["currency_code"]
+            isOneToOne: false
+            referencedRelation: "supported_currency"
+            referencedColumns: ["currency_code"]
+          },
         ]
       }
       current_rates: {
@@ -1143,7 +1234,22 @@ export type Database = {
           token?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_user_id_fk"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       document_sequence: {
         Row: {
@@ -1180,6 +1286,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
           },
         ]
       }
@@ -1327,6 +1440,34 @@ export type Database = {
             referencedRelation: "financial_behavior_rule"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_fiscal_period_fk"
+            columns: ["country_code", "fiscal_year", "period"]
+            isOneToOne: false
+            referencedRelation: "fiscal_period_config"
+            referencedColumns: ["country_code", "fiscal_year", "period"]
+          },
+          {
+            foreignKeyName: "ngoda_currency_code_fk"
+            columns: ["currency_code"]
+            isOneToOne: false
+            referencedRelation: "supported_currency"
+            referencedColumns: ["currency_code"]
+          },
+          {
+            foreignKeyName: "ngoda_user_id_fk"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
         ]
       }
       financial_behavior_rule: {
@@ -1454,6 +1595,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "financial_transaction"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
           },
         ]
       }
@@ -1680,7 +1828,36 @@ export type Database = {
           withdrawal_cash_amount_usd?: number
           withdrawal_percentage?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_fiscal_period_fk"
+            columns: ["country_code", "fiscal_year", "period"]
+            isOneToOne: false
+            referencedRelation: "fiscal_period_config"
+            referencedColumns: ["country_code", "fiscal_year", "period"]
+          },
+          {
+            foreignKeyName: "ngoda_currency_code_fk"
+            columns: ["currency_code"]
+            isOneToOne: false
+            referencedRelation: "supported_currency"
+            referencedColumns: ["currency_code"]
+          },
+          {
+            foreignKeyName: "ngoda_user_id_fk"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       financial_pot_event: {
         Row: {
@@ -1749,7 +1926,36 @@ export type Database = {
           transaction_type?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_fiscal_period_fk"
+            columns: ["country_code", "fiscal_year", "period"]
+            isOneToOne: false
+            referencedRelation: "fiscal_period_config"
+            referencedColumns: ["country_code", "fiscal_year", "period"]
+          },
+          {
+            foreignKeyName: "ngoda_currency_code_fk"
+            columns: ["currency_code"]
+            isOneToOne: false
+            referencedRelation: "supported_currency"
+            referencedColumns: ["currency_code"]
+          },
+          {
+            foreignKeyName: "ngoda_user_id_fk"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       financial_transaction: {
         Row: {
@@ -1818,6 +2024,13 @@ export type Database = {
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
         ]
       }
       fiscal_period_config: {
@@ -1863,7 +2076,15 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+        ]
       }
       gamification_event: {
         Row: {
@@ -1958,6 +2179,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_currency_code_fk"
+            columns: ["currency_code"]
+            isOneToOne: false
+            referencedRelation: "supported_currency"
+            referencedColumns: ["currency_code"]
           },
         ]
       }
@@ -2111,6 +2346,27 @@ export type Database = {
             referencedRelation: "supported_currency"
             referencedColumns: ["currency_code"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_fiscal_period_fk"
+            columns: ["country_code", "fiscal_year", "period"]
+            isOneToOne: false
+            referencedRelation: "fiscal_period_config"
+            referencedColumns: ["country_code", "fiscal_year", "period"]
+          },
+          {
+            foreignKeyName: "ngoda_gl_account_fk"
+            columns: ["gl_account_code"]
+            isOneToOne: false
+            referencedRelation: "gl_account"
+            referencedColumns: ["code"]
+          },
         ]
       }
       gl_update_request: {
@@ -2189,6 +2445,13 @@ export type Database = {
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
         ]
       }
       government_tax_config: {
@@ -2250,6 +2513,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "supported_currency"
             referencedColumns: ["currency_code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
           },
         ]
       }
@@ -2323,6 +2593,20 @@ export type Database = {
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_settlement_batch_fk"
+            columns: ["settlement_batch_id"]
+            isOneToOne: false
+            referencedRelation: "government_tax_settlement_batch"
+            referencedColumns: ["id"]
+          },
         ]
       }
       government_tax_settlement_batch: {
@@ -2395,6 +2679,13 @@ export type Database = {
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
         ]
       }
       government_tax_settlement_item: {
@@ -2465,6 +2756,13 @@ export type Database = {
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
         ]
       }
       idempotency_key: {
@@ -2518,6 +2816,20 @@ export type Database = {
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_user_id_fk"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
         ]
       }
       job_error_log: {
@@ -2545,7 +2857,15 @@ export type Database = {
           job_name?: string
           reference?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+        ]
       }
       liquidation_blockchain_queue: {
         Row: {
@@ -2676,6 +2996,34 @@ export type Database = {
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
           },
+          {
+            foreignKeyName: "ngoda_blockchain_code_fk"
+            columns: ["blockchain_code"]
+            isOneToOne: false
+            referencedRelation: "supported_blockchain"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_liquidation_job_fk"
+            columns: ["liquidation_job_id"]
+            isOneToOne: false
+            referencedRelation: "liquidation_job"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ngoda_user_id_fk"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
         ]
       }
       liquidation_job: {
@@ -2771,6 +3119,34 @@ export type Database = {
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
           },
+          {
+            foreignKeyName: "ngoda_blockchain_code_fk"
+            columns: ["blockchain_code"]
+            isOneToOne: false
+            referencedRelation: "supported_blockchain"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "ngoda_blockchain_queue_fk"
+            columns: ["blockchain_queue_id"]
+            isOneToOne: false
+            referencedRelation: "liquidation_blockchain_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_user_id_fk"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
         ]
       }
       loan: {
@@ -2862,6 +3238,13 @@ export type Database = {
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
         ]
       }
       loan_balance_snapshot: {
@@ -2919,7 +3302,36 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_fiscal_period_fk"
+            columns: ["country_code", "fiscal_year", "period"]
+            isOneToOne: false
+            referencedRelation: "fiscal_period_config"
+            referencedColumns: ["country_code", "fiscal_year", "period"]
+          },
+          {
+            foreignKeyName: "ngoda_loan_fk"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loan"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ngoda_user_id_fk"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       loan_config: {
         Row: {
@@ -2961,7 +3373,15 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+        ]
       }
       loan_entry: {
         Row: {
@@ -3046,6 +3466,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "loan"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
           },
         ]
       }
@@ -3497,7 +3924,15 @@ export type Database = {
           points_expiry_months?: number | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+        ]
       }
       loyalty_redemption_config: {
         Row: {
@@ -3542,7 +3977,22 @@ export type Database = {
           valid_from?: string | null
           valid_until?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_currency_code_fk"
+            columns: ["currency_code"]
+            isOneToOne: false
+            referencedRelation: "supported_currency"
+            referencedColumns: ["currency_code"]
+          },
+        ]
       }
       loyalty_rule: {
         Row: {
@@ -3620,7 +4070,22 @@ export type Database = {
           valid_from?: string | null
           valid_until?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_currency_code_fk"
+            columns: ["currency_code"]
+            isOneToOne: false
+            referencedRelation: "supported_currency"
+            referencedColumns: ["currency_code"]
+          },
+        ]
       }
       loyalty_rule_band: {
         Row: {
@@ -3704,6 +4169,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "supported_currency"
             referencedColumns: ["currency_code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
           },
         ]
       }
@@ -3790,6 +4262,20 @@ export type Database = {
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_settlement_batch_fk"
+            columns: ["settlement_batch_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_settlement_batch"
+            referencedColumns: ["id"]
+          },
         ]
       }
       merchant_fee_splitting_config: {
@@ -3845,6 +4331,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "supported_currency"
             referencedColumns: ["currency_code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
           },
         ]
       }
@@ -3924,6 +4417,13 @@ export type Database = {
             referencedRelation: "fiscal_period_config"
             referencedColumns: ["country_code", "fiscal_year", "period"]
           },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
         ]
       }
       merchant_settlement_item: {
@@ -4000,6 +4500,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
           },
         ]
       }
@@ -4084,7 +4591,15 @@ export type Database = {
           transaction_type?: Database["public"]["Enums"]["TransactionType"]
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+        ]
       }
       notifications: {
         Row: {
@@ -4135,7 +4650,22 @@ export type Database = {
           transaction_type?: Database["public"]["Enums"]["TransactionType"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_user_id_fk"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       operational_country: {
         Row: {
@@ -4146,6 +4676,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          time_zone: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -4157,6 +4688,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          time_zone?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -4168,6 +4700,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          time_zone?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -4263,6 +4796,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_currency_code_fk"
+            columns: ["currency_code"]
+            isOneToOne: false
+            referencedRelation: "supported_currency"
+            referencedColumns: ["currency_code"]
+          },
+          {
             foreignKeyName: "reconciliation_adjustment_request_fiscal_year_period_fkey"
             columns: ["country_code", "fiscal_year", "period"]
             isOneToOne: false
@@ -4345,6 +4892,27 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_fiscal_period_fk"
+            columns: ["country_code", "fiscal_year", "period"]
+            isOneToOne: false
+            referencedRelation: "fiscal_period_config"
+            referencedColumns: ["country_code", "fiscal_year", "period"]
+          },
+          {
+            foreignKeyName: "ngoda_currency_code_fk"
+            columns: ["currency_code"]
+            isOneToOne: false
+            referencedRelation: "supported_currency"
+            referencedColumns: ["currency_code"]
+          },
+          {
             foreignKeyName: "reconciliation_item_run_id_fkey"
             columns: ["run_id"]
             isOneToOne: false
@@ -4400,6 +4968,13 @@ export type Database = {
           total_checks?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
           {
             foreignKeyName: "reconciliation_run_fiscal_year_period_fkey"
             columns: ["country_code", "fiscal_year", "period"]
@@ -4465,6 +5040,20 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_settlement_batch_fk"
+            columns: ["settlement_batch_id"]
+            isOneToOne: false
+            referencedRelation: "referral_earnings_settlement_batch"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "referral_earnings_currency_code_fkey"
             columns: ["currency_code"]
@@ -4542,6 +5131,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
             foreignKeyName: "referral_earnings_config_currency_code_fkey"
             columns: ["currency_code"]
             isOneToOne: false
@@ -4613,6 +5209,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
             foreignKeyName: "referral_earnings_settlement_batch_currency_code_fkey"
             columns: ["currency_code"]
             isOneToOne: false
@@ -4669,6 +5272,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
           {
             foreignKeyName: "referral_earnings_settlement_item_batch_id_fkey"
             columns: ["batch_id"]
@@ -5013,7 +5623,15 @@ export type Database = {
           triggered_at?: string
           triggered_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+        ]
       }
       tokenised_asset_adjustment_request: {
         Row: {
@@ -5210,6 +5828,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
             foreignKeyName: "transaction_limit_currency_code_fkey"
             columns: ["currency_code"]
             isOneToOne: false
@@ -5224,6 +5849,8 @@ export type Database = {
           country_code: string
           created_at: string
           created_by: string
+          gold_buy_preparation: Json | null
+          gold_sell_preparation: Json | null
           id: string
           message: string | null
           payment_fee_contribution: boolean
@@ -5240,6 +5867,8 @@ export type Database = {
           country_code: string
           created_at?: string
           created_by: string
+          gold_buy_preparation?: Json | null
+          gold_sell_preparation?: Json | null
           id?: string
           message?: string | null
           payment_fee_contribution?: boolean
@@ -5256,6 +5885,8 @@ export type Database = {
           country_code?: string
           created_at?: string
           created_by?: string
+          gold_buy_preparation?: Json | null
+          gold_sell_preparation?: Json | null
           id?: string
           message?: string | null
           payment_fee_contribution?: boolean
@@ -5268,6 +5899,27 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "ngoda_blockchain_code_fk"
+            columns: ["blockchain_code"]
+            isOneToOne: false
+            referencedRelation: "supported_blockchain"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_user_id_fk"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "transaction_state_created_by_fkey"
             columns: ["created_by"]
@@ -5348,6 +6000,13 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
           {
             foreignKeyName: "transaction_type_fee_config_currency_code_fkey"
             columns: ["currency_code"]
@@ -5526,6 +6185,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "ngoda_user_id_fk"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "user_financial_badge_badge_id_fkey"
             columns: ["badge_id"]
             isOneToOne: false
@@ -5618,7 +6284,15 @@ export type Database = {
           last_seen_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ngoda_user_id_fk"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_role: {
         Row: {
@@ -5886,6 +6560,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
             foreignKeyName: "wallet_blockchain_code_fkey"
             columns: ["blockchain_code"]
             isOneToOne: false
@@ -5959,6 +6640,27 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
+          {
+            foreignKeyName: "ngoda_country_fiscal_period_fk"
+            columns: ["country_code", "fiscal_year", "period"]
+            isOneToOne: false
+            referencedRelation: "fiscal_period_config"
+            referencedColumns: ["country_code", "fiscal_year", "period"]
+          },
+          {
+            foreignKeyName: "ngoda_user_id_fk"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "wallet_balance_snapshot_blockchain_code_fkey"
             columns: ["blockchain_code"]
             isOneToOne: false
@@ -6027,6 +6729,13 @@ export type Database = {
           wallet_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "ngoda_country_code_fk"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "operational_country"
+            referencedColumns: ["country_code"]
+          },
           {
             foreignKeyName: "wallet_entry_currency_code_fkey"
             columns: ["currency_code"]
@@ -6122,6 +6831,34 @@ export type Database = {
       }
       build_country_supported_currencies: {
         Args: { p_country_code: string }
+        Returns: Json
+      }
+      build_gold_buy_components_from_pricing: {
+        Args: {
+          p_mappings: Database["public"]["Tables"]["transaction_gl_mapping"]["Row"][]
+          p_pricing: Database["public"]["CompositeTypes"]["pricing_result"]
+          p_principal: number
+          p_reverse?: boolean
+          p_transaction_type: Database["public"]["Enums"]["TransactionType"]
+        }
+        Returns: Database["public"]["CompositeTypes"]["posting_component"][]
+      }
+      build_gold_buy_recovery_context: {
+        Args: { p_blockchain_transaction_id: string; p_executor_id: string }
+        Returns: Json
+      }
+      build_gold_sell_components_from_pricing: {
+        Args: {
+          p_mappings: Database["public"]["Tables"]["transaction_gl_mapping"]["Row"][]
+          p_pricing: Database["public"]["CompositeTypes"]["pricing_result"]
+          p_principal: number
+          p_reverse?: boolean
+          p_transaction_type: Database["public"]["Enums"]["TransactionType"]
+        }
+        Returns: Database["public"]["CompositeTypes"]["posting_component"][]
+      }
+      build_gold_sell_recovery_context: {
+        Args: { p_blockchain_transaction_id: string; p_executor_id: string }
         Returns: Json
       }
       build_my_accounts_dashboard: { Args: never; Returns: Json }
@@ -6325,6 +7062,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      calculate_gold_buy_execution_pricing: {
+        Args: {
+          p_amount: number
+          p_country_code: string
+          p_currency_code: string
+        }
+        Returns: Json
+      }
       calculate_gold_buy_pricing: {
         Args: {
           p_amount: number
@@ -6339,6 +7084,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      calculate_gold_sell_execution_pricing: {
+        Args: {
+          p_amount: number
+          p_country_code: string
+          p_currency_code: string
+        }
+        Returns: Json
       }
       calculate_gold_sell_pricing: {
         Args: {
@@ -6417,6 +7170,7 @@ export type Database = {
           p_country_code: string
           p_fee_payment_method?: string
           p_ip_address?: string
+          p_receiver_identifier?: string
           p_sender_id: string
           p_transaction: Json
           p_transaction_state_id: string
@@ -6557,57 +7311,34 @@ export type Database = {
           success: boolean
         }[]
       }
-      complete_merchant_payment:
-        | {
-            Args: {
-              p_approval: Json
-              p_country_code: string
-              p_ip_address?: string
-              p_payer_id: string
-              p_transaction: Json
-              p_transaction_state_id: string
-            }
-            Returns: {
-              amount: string
-              currency_code: string
-              device_tokens: string[]
-              document_number: string
-              payment_fee: string
-              push_body: string
-              push_reference: string
-              push_title: string
-              receiver_notification_id: string
-              success: boolean
-            }[]
-          }
-        | {
-            Args: {
-              p_approval: Json
-              p_country_code: string
-              p_ip_address?: string
-              p_payer_id: string
-              p_payment_fee_contribution: boolean
-              p_transaction: Json
-              p_transaction_state_id: string
-            }
-            Returns: {
-              amount: string
-              amount_usd: string
-              currency_code: string
-              device_tokens: string[]
-              document_number: string
-              financial_transaction_id: string
-              payer_debit_amount: string
-              payment_fee: string
-              payment_fee_contribution: boolean
-              payment_fee_usd: string
-              push_body: string
-              push_reference: string
-              push_title: string
-              receiver_notification_id: string
-              success: boolean
-            }[]
-          }
+      complete_merchant_payment: {
+        Args: {
+          p_approval: Json
+          p_country_code: string
+          p_ip_address?: string
+          p_payer_id: string
+          p_payment_fee_contribution: boolean
+          p_transaction: Json
+          p_transaction_state_id: string
+        }
+        Returns: {
+          amount: string
+          amount_usd: string
+          currency_code: string
+          device_tokens: string[]
+          document_number: string
+          financial_transaction_id: string
+          payer_debit_amount: string
+          payment_fee: string
+          payment_fee_contribution: boolean
+          payment_fee_usd: string
+          push_body: string
+          push_reference: string
+          push_title: string
+          receiver_notification_id: string
+          success: boolean
+        }[]
+      }
       complete_my_token_adjustment_execution: {
         Args: {
           p_adjustment_request_id: string
@@ -6638,6 +7369,24 @@ export type Database = {
           success: boolean
           voucher_remaining_balance: string
         }[]
+      }
+      complete_verified_gold_buy_recovery: {
+        Args: {
+          p_blockchain_transaction_id: string
+          p_executor_id: string
+          p_ip_address?: string
+          p_verified_context: Json
+        }
+        Returns: Json
+      }
+      complete_verified_gold_sell_recovery: {
+        Args: {
+          p_blockchain_transaction_id: string
+          p_executor_id: string
+          p_ip_address?: string
+          p_verified_context: Json
+        }
+        Returns: Json
       }
       complete_voucher_payment: {
         Args: {
@@ -6772,6 +7521,7 @@ export type Database = {
           }
       create_my_transaction_state: {
         Args: {
+          p_receiver_identifier?: string
           p_transaction: Json
           p_transaction_type: Database["public"]["Enums"]["TransactionType"]
         }
@@ -6787,10 +7537,13 @@ export type Database = {
           p_audience: Database["public"]["Enums"]["NotificationAudience"]
           p_country_code: string
           p_currency: string
+          p_fee?: number
+          p_gross_amount?: number
           p_quantity?: number
           p_receiver?: string
           p_reference: string
           p_sender?: string
+          p_tax?: number
           p_transaction_type: Database["public"]["Enums"]["TransactionType"]
         }
         Returns: Database["public"]["CompositeTypes"]["notification_message"]
@@ -6800,6 +7553,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      create_weekly_agent_commission_batch: {
+        Args: {
+          p_country_code: string
+          p_currency_code: string
+          p_week_start: string
+        }
+        Returns: Json
       }
       credit_agent_cash_deposit: {
         Args: {
@@ -6934,6 +7695,25 @@ export type Database = {
       evaluate_user_badges: {
         Args: { p_event_id?: string; p_user_id: string }
         Returns: Json
+      }
+      execute_additional_collateral: {
+        Args: {
+          p_reference: string
+          p_requested_collateral: string
+          p_token_balance: string
+          p_user_id: string
+        }
+        Returns: {
+          collateral_added: string
+          collateral_required: boolean
+          loans_adjusted: number
+          new_locked_collateral: string
+          previous_locked_collateral: string
+          remaining_required_collateral: string
+          requested_collateral: string
+          success: boolean
+          unused_collateral: string
+        }[]
       }
       execute_loan_disbursement: {
         Args: {
@@ -7324,6 +8104,10 @@ export type Database = {
           rate_api: string
         }[]
       }
+      fetch_gold_sell_execution_context: {
+        Args: { p_transaction_state_id: string }
+        Returns: Json
+      }
       fetch_government_tax_rate: {
         Args: {
           p_country_code: string
@@ -7402,6 +8186,10 @@ export type Database = {
         Args: { p_as_of_date: string; p_currency_code?: string }
         Returns: Json
       }
+      fetch_my_blockchain_recovery_context: {
+        Args: { p_blockchain_transaction_id: string }
+        Returns: Json
+      }
       fetch_my_cash_deposit_context: {
         Args: { p_provider_id: string; p_v: string }
         Returns: {
@@ -7462,6 +8250,24 @@ export type Database = {
         Returns: Json
       }
       fetch_my_current_gl_balances: { Args: never; Returns: Json }
+      fetch_my_current_government_tax: {
+        Args: {
+          p_as_of?: string
+          p_currency_code?: string
+          p_page?: number
+          p_page_size?: number
+        }
+        Returns: Json
+      }
+      fetch_my_current_period_agent_commissions: {
+        Args: {
+          p_as_of?: string
+          p_currency_code?: string
+          p_page?: number
+          p_page_size?: number
+        }
+        Returns: Json
+      }
       fetch_my_current_token_gl_balance: { Args: never; Returns: Json }
       fetch_my_customer_dashboard_context: {
         Args: never
@@ -7742,6 +8548,10 @@ export type Database = {
           status: Database["public"]["Enums"]["AdjustmentStatus"]
           uom: Database["public"]["Enums"]["Uom"]
         }[]
+      }
+      fetch_token_role_grant_config: {
+        Args: { p_blockchain_code: string }
+        Returns: Json
       }
       fetch_transaction_doc_num_prefix: {
         Args: {
@@ -8185,68 +8995,37 @@ export type Database = {
           treasury_wallet_address: string
         }[]
       }
-      prepare_merchant_payment:
-        | {
-            Args: {
-              p_approval: Json
-              p_country_code: string
-              p_payer_id: string
-              p_transaction: Json
-              p_transaction_state_id: string
-            }
-            Returns: {
-              amount: string
-              commission_amount: string
-              commission_rate: string
-              components: Database["public"]["CompositeTypes"]["posting_component"][]
-              country_code: string
-              currency_code: string
-              document_prefix: string
-              fiscal_year: number
-              mappings: Database["public"]["Tables"]["transaction_gl_mapping"]["Row"][]
-              merchant_credit_amount: string
-              merchant_id: string
-              merchant_wallet_address: string
-              other_amount: string
-              payer_debit_amount: string
-              payer_id: string
-              payer_wallet_address: string
-              payment_fee: string
-              period: number
-              treasury_id: string
-            }[]
-          }
-        | {
-            Args: {
-              p_approval: Json
-              p_country_code: string
-              p_payer_id: string
-              p_payment_fee_contribution: boolean
-              p_transaction: Json
-              p_transaction_state_id: string
-            }
-            Returns: {
-              amount: string
-              commission_amount: string
-              commission_rate: string
-              components: Database["public"]["CompositeTypes"]["posting_component"][]
-              country_code: string
-              currency_code: string
-              document_prefix: string
-              fiscal_year: number
-              mappings: Database["public"]["Tables"]["transaction_gl_mapping"]["Row"][]
-              merchant_credit_amount: string
-              merchant_id: string
-              merchant_wallet_address: string
-              other_amount: string
-              payer_debit_amount: string
-              payer_id: string
-              payer_wallet_address: string
-              payment_fee: string
-              period: number
-              treasury_id: string
-            }[]
-          }
+      prepare_merchant_payment: {
+        Args: {
+          p_approval: Json
+          p_country_code: string
+          p_payer_id: string
+          p_payment_fee_contribution: boolean
+          p_transaction: Json
+          p_transaction_state_id: string
+        }
+        Returns: {
+          amount: string
+          commission_amount: string
+          commission_rate: string
+          components: Database["public"]["CompositeTypes"]["posting_component"][]
+          country_code: string
+          currency_code: string
+          document_prefix: string
+          fiscal_year: number
+          mappings: Database["public"]["Tables"]["transaction_gl_mapping"]["Row"][]
+          merchant_credit_amount: string
+          merchant_id: string
+          merchant_wallet_address: string
+          other_amount: string
+          payer_debit_amount: string
+          payer_id: string
+          payer_wallet_address: string
+          payment_fee: string
+          period: number
+          treasury_id: string
+        }[]
+      }
       prepare_my_token_adjustment_execution: {
         Args: { p_adjustment_request_id: string; p_blockchain_code: string }
         Returns: Json
@@ -8501,6 +9280,12 @@ export type Database = {
         Returns: Json
       }
       round_down: { Args: { p_value: number }; Returns: number }
+      run_monthly_government_tax_batches: { Args: never; Returns: Json }
+      run_weekly_agent_commission_batches: { Args: never; Returns: Json }
+      save_gold_buy_execution_context: {
+        Args: { p_context: Json; p_transaction_state_id: string }
+        Returns: undefined
+      }
       save_liquidation_blockchain_signed_payload: {
         Args: { p_queue_id: string; p_signed_payload: Json }
         Returns: Json
@@ -8672,6 +9457,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          time_zone: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -8729,6 +9515,15 @@ export type Database = {
           p_components: Database["public"]["CompositeTypes"]["posting_component"][]
         }
         Returns: Database["public"]["CompositeTypes"]["posting_component"][]
+      }
+      validate_gold_sell_available_balance: {
+        Args: {
+          p_blockchain_code: string
+          p_country_code: string
+          p_seller_id: string
+          p_token_quantity: number
+        }
+        Returns: undefined
       }
       verify_registration_auth_creation: {
         Args: { p_attempt_id: string; p_user_id: string }
@@ -8875,7 +9670,12 @@ export type Database = {
         | "loan_disbursement"
         | "loan_repayment"
         | "loan_interest_accrual"
-      financial_badge_metric: "spending" | "saving" | "investment" | "borrowing"
+      financial_badge_metric:
+        | "spending"
+        | "saving"
+        | "investment"
+        | "borrowing"
+        | "repayment"
       financial_behavior_scope: "period" | "fiscal_year"
       financial_behavior_type:
         | "shopper"
@@ -9444,7 +10244,13 @@ export const Constants = {
         "loan_repayment",
         "loan_interest_accrual",
       ],
-      financial_badge_metric: ["spending", "saving", "investment", "borrowing"],
+      financial_badge_metric: [
+        "spending",
+        "saving",
+        "investment",
+        "borrowing",
+        "repayment",
+      ],
       financial_behavior_scope: ["period", "fiscal_year"],
       financial_behavior_type: [
         "shopper",

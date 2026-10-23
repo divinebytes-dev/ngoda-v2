@@ -213,20 +213,10 @@ class AccountsApiService {
     required double amount,
     required String currency,
   }) async {
-    /*
-     * This method is intentionally not connected to an
-     * Edge Function yet.
-     *
-     * The supplied implementation still calls:
-     *
-     * /api/v1/admin/accounts/fund-treasury
-     *
-     * We do not have a verified Edge Function name for
-     * this operation in the supplied source.
-     */
-    throw UnimplementedError(
-      'Treasury funding Edge Function '
-      'has not yet been migrated.',
+    await _functions.invokeVoid(
+      functionName: 'fund-treasury',
+      method: HttpMethod.post,
+      body: {'amount': amount, "currency": currency},
     );
   }
 }

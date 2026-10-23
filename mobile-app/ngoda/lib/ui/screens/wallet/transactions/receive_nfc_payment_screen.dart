@@ -14,6 +14,7 @@ import 'package:ngoda/ui/extensions/theme_extension.dart';
 import 'package:ngoda/ui/functions/get_current_user.dart';
 import 'package:ngoda/ui/functions/get_signed_transaction.dart';
 import 'package:ngoda/ui/functions/get_wallet_balances.dart';
+import 'package:ngoda/ui/functions/refresh_user_dashboard.dart';
 import 'package:ngoda/ui/screens/finance/providers/transactions_config_provider.dart';
 import 'package:ngoda/ui/screens/wallet/transactions/provider/wallet_transaction_provider.dart';
 import 'package:ngoda/ui/shared/app_text_styles.dart';
@@ -501,6 +502,7 @@ class _ReceiveNFCPaymentScreenState
         return;
       }
 
+      refreshUserDashboard(ref);
       await showReceipt();
 
       if (!mounted) {

@@ -32,13 +32,16 @@ class AdminNotifier extends Notifier<AdminTransactionsState> {
     }
   }
 
-  Future<void> grandRole({required String role}) async {
+  Future<void> grandRole({
+    required String role,
+    required String blockchainCode,
+  }) async {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       final service = ref.read(adminApiServiceProvider);
 
-      await service.grandRole(role: role);
+      await service.grandRole(role: role, blockchainCode: blockchainCode);
 
       state = state.copyWith(isLoading: false, clearError: true);
     } catch (e) {

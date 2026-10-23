@@ -330,14 +330,6 @@ abstract final class DialogService {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: AppTextStyles.medium(
-                context,
-              ).copyWith(fontWeight: FontWeight.w700),
-            ),
-            SizedBox(height: context.spacing.sm),
             Flexible(
               child: SingleChildScrollView(
                 child: Column(
@@ -345,9 +337,22 @@ abstract final class DialogService {
                   children: [
                     RepaintBoundary(
                       key: qrKey,
-                      child: UserTransactionScreen(
-                        data: data,
-                        isDeposit: isDeposit,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            title,
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.medium(
+                              context,
+                            ).copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          SizedBox(height: context.spacing.sm),
+                          UserTransactionScreen(
+                            data: data,
+                            isDeposit: isDeposit,
+                          ),
+                        ],
                       ),
                     ),
                     SizedBox(height: context.spacing.md),
@@ -372,6 +377,68 @@ abstract final class DialogService {
       ),
     );
   }
+
+  // static Widget _buildTransactionQrDialog(
+  //   BuildContext context, {
+  //   required WidgetRef ref,
+  //   required String title,
+  //   required GlobalKey qrKey,
+  //   required TransactionData data,
+  //   required VoidCallback onCancel,
+  //   required bool download,
+  //   required bool isDeposit,
+  // }) {
+  //   return _dialogSurface(
+  //     context,
+  //     accentColor: context.colorScheme.primary,
+  //     maxHeightFactor: 0.85,
+  //     child: Padding(
+  //       padding: EdgeInsets.all(context.spacing.md),
+  //       child: Column(
+  //         mainAxisSize: MainAxisSize.min,
+  //         children: [
+  //           Text(
+  //             title,
+  //             textAlign: TextAlign.center,
+  //             style: AppTextStyles.medium(
+  //               context,
+  //             ).copyWith(fontWeight: FontWeight.w700),
+  //           ),
+  //           SizedBox(height: context.spacing.sm),
+  //           Flexible(
+  //             child: SingleChildScrollView(
+  //               child: Column(
+  //                 mainAxisSize: MainAxisSize.min,
+  //                 children: [
+  //                   RepaintBoundary(
+  //                     key: qrKey,
+  //                     child: UserTransactionScreen(
+  //                       data: data,
+  //                       isDeposit: isDeposit,
+  //                     ),
+  //                   ),
+  //                   SizedBox(height: context.spacing.md),
+  //                   const Divider(),
+  //                   SizedBox(height: context.spacing.xs),
+  //                 ],
+  //               ),
+  //             ),
+  //           ),
+  //           if (download)
+  //             _buildTransactionActions(
+  //               context,
+  //               ref: ref,
+  //               qrKey: qrKey,
+  //               data: data,
+  //               onCancel: onCancel,
+  //             )
+  //           else
+  //             AppButton(text: 'Cancel', isPrimary: false, onPressed: onCancel),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
 
   static Widget _buildTransactionActions(
     BuildContext context, {

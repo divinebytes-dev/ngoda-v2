@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:ngoda/data_models/accounts/accounts_dashboard.dart';
 import 'package:ngoda/services/number_format_service.dart';
 import 'package:ngoda/ui/extensions/app_size.dart';
 import 'package:ngoda/ui/extensions/theme_extension.dart';
@@ -40,7 +39,6 @@ class AccountsFundingScreen extends ConsumerWidget {
             }
 
             final dashboard = response.result;
-            final total = dashboard?.totalBankNet ?? 0;
 
             return Column(
               children: [
@@ -75,22 +73,63 @@ class AccountsFundingScreen extends ConsumerWidget {
                           ),
                         ),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(
                               'Balances',
+                              textAlign: TextAlign.center,
                               style: AppTextStyles.small(
                                 context,
                               ).copyWith(color: colorScheme.onSurfaceVariant),
                             ),
-                            SizedBox(height: spacing.xs),
-                            Text(
-                              NumberFormatService.formatAmount(total),
-                              style: AppTextStyles.mediumNumber(context)
-                                  .copyWith(
-                                    color: colorScheme.primary,
-                                    fontWeight: FontWeight.w700,
+                            SizedBox(height: spacing.md),
+                            if (dashboard == null || dashboard.bankNet.isEmpty)
+                              Text(
+                                'No funding balances',
+                                textAlign: TextAlign.center,
+                                style: AppTextStyles.small(
+                                  context,
+                                ).copyWith(color: colorScheme.onSurfaceVariant),
+                              )
+                            else
+                              ...dashboard.sortedBankNetCurrencyList.map((
+                                currency,
+                              ) {
+                                return Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: spacing.xs,
                                   ),
-                            ),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        currency.toUpperCase(),
+                                        style: AppTextStyles.small(context)
+                                            .copyWith(
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                            ),
+                                      ),
+                                      SizedBox(width: spacing.sm),
+                                      Expanded(
+                                        child: Text(
+                                          NumberFormatService.formatAmount(
+                                            dashboard.bankNetBalance(currency),
+                                            currency: currency,
+                                          ),
+                                          textAlign: TextAlign.right,
+                                          style:
+                                              AppTextStyles.smallNumber(
+                                                context,
+                                              ).copyWith(
+                                                color: colorScheme.primary,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
                           ],
                         ),
                       ),

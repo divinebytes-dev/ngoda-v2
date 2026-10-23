@@ -5,13 +5,13 @@ import 'package:ngoda/data_models/params/credit_agent_balance_params.dart';
 import 'package:ngoda/data_models/params/settlement_items_params.dart';
 import 'package:ngoda/ui/screens/accounts/commission/accounts_payment_screen.dart';
 import 'package:ngoda/ui/screens/accounts/commission/commission_summary_screen.dart';
-import 'package:ngoda/ui/screens/accounts/commission/create_batch_payment_screen.dart';
+import 'package:ngoda/ui/screens/accounts/commission/current_period_commission_screen.dart';
 import 'package:ngoda/ui/screens/accounts/commission/settle_commission_payment.dart';
 import 'package:ngoda/ui/screens/accounts/commission/settled_commission_summary_screen.dart';
 import 'package:ngoda/ui/screens/accounts/funding/accounts_funding_screen.dart';
 import 'package:ngoda/ui/screens/accounts/funding/credit_agent_cash_settlement_request_screen.dart';
 import 'package:ngoda/ui/screens/accounts/funding/fund_treasury_screen.dart';
-import 'package:ngoda/ui/screens/accounts/tax/create_tax_batch_payment_screen.dart';
+import 'package:ngoda/ui/screens/accounts/tax/current_period_pending_tax_screen.dart';
 import 'package:ngoda/ui/screens/accounts/tax/settle_tax_batch_payment_screen.dart';
 import 'package:ngoda/ui/screens/accounts/tax/settled_tax_summary_screen.dart';
 import 'package:ngoda/ui/screens/accounts/tax/tax_summary_screen.dart';
@@ -91,10 +91,16 @@ final List<GoRoute> accountsRoutes = [
           ),
         ],
       ),
+      // GoRoute(
+      //   path: 'create-commission-batch',
+      //   pageBuilder: (_, state) {
+      //     return slidePage(CreateBatchPaymentScreen(), state);
+      //   },
+      // ),
       GoRoute(
-        path: 'create-commission-batch',
+        path: 'current-period-commission',
         pageBuilder: (_, state) {
-          return slidePage(CreateBatchPaymentScreen(), state);
+          return slidePage(CurrentPeriodCommissionScreen(), state);
         },
       ),
       GoRoute(
@@ -155,10 +161,16 @@ final List<GoRoute> accountsRoutes = [
           ),
         ],
       ),
+      // GoRoute(
+      //   path: 'create-tax-payment',
+      //   pageBuilder: (_, state) {
+      //     return slidePage(CreateTaxBatchPaymentScreen(), state);
+      //   },
+      // ),
       GoRoute(
-        path: 'create-tax-payment',
+        path: 'current-period-tax',
         pageBuilder: (_, state) {
-          return slidePage(CreateTaxBatchPaymentScreen(), state);
+          return slidePage(CurrentPeriodPendingTaxScreen(), state);
         },
       ),
       GoRoute(

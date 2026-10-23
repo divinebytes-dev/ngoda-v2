@@ -311,7 +311,7 @@ List<AppIconButton> getUserHomeScreenQuickLinks({
           },
         ),
         _quickLink(
-          label: 'Create Voucher',
+          label: 'New Voucher',
           icon: Icons.receipt_long_outlined,
           iconSize: iconSize,
           color: primary,

@@ -851,10 +851,14 @@ Deno.serve(
         },
       );
 
-      return errorResponse(
-        message ||
-          "FAILED_TO_ADJUST_TOKENS",
-      );
+return errorResponse(
+  error instanceof AppError
+    ? error
+    : new AppError(
+        "FAILED_TO_ADJUST_TOKENS",
+        500,
+      ),
+);
     }
   },
 );

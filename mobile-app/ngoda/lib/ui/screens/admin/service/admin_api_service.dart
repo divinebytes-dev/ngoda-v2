@@ -81,10 +81,13 @@ class AdminApiService {
     );
   }
 
-  Future<void> grandRole({required String role}) async {
+  Future<void> grandRole({
+    required String role,
+    required String blockchainCode,
+  }) async {
     await _functions.invokeVoid(
       functionName: 'grant-token-role',
-      body: {'role': role},
+      body: {'role': role, 'blockchain_code': blockchainCode},
     );
   }
 }
