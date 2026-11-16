@@ -7,6 +7,7 @@ import 'package:ngoda/data_models/financial-intelligence/badges/financial_badge.
 import 'package:ngoda/data_models/financial-intelligence/badges/financial_badge_list.dart';
 import 'package:ngoda/services/screen_scaling_service.dart';
 import 'package:ngoda/ui/screens/financial-intelligence/provider/financial_badges_provider.dart';
+import 'package:ngoda/ui/shared/app_colors.dart';
 import 'package:ngoda/ui/shared/app_text_styles.dart';
 import 'package:ngoda/ui/widgets/app_empty_state.dart';
 import 'package:ngoda/ui/widgets/app_error_state.dart';
@@ -1308,10 +1309,10 @@ class _BadgeColors {
 
     switch (behavior.trim().toLowerCase()) {
       case 'saver':
-        return colors.primary;
+        return AppColors.positive;
 
       case 'investor':
-        return colors.tertiary;
+        return colors.primary;
 
       case 'shopper':
         return colors.error;

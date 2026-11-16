@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:ngoda/core/providers/user_engagement_service_provider.dart';
 
 import 'package:ngoda/data_models/gamification/loyalty/transaction_loyalty_result.dart';
 import 'package:ngoda/data_models/gamification/notifications/gamification_notification.dart';
+import 'package:ngoda/ui/screens/auth/providers/auth_provider.dart';
 import 'package:ngoda/ui/widgets/gamification_celebration_overlay.dart';
 
 abstract final class TransactionLoyaltyCelebrationService {
@@ -127,5 +130,33 @@ abstract final class TransactionLoyaltyCelebrationService {
               '${part.substring(1).toLowerCase()}',
         )
         .join(' ');
+  }
+
+  static Future<void> showAndRequestReview(
+    BuildContext context,
+    TransactionLoyaltyResult? result, {
+    required WidgetRef ref,
+  }) async {
+    await show(context, result);
+
+    if (!context.mounted) {
+      return;
+    }
+
+    await ref
+        .read(userEngagementServiceProvider)
+        .maybeRequestReview(
+          shouldPrompt: () {
+            if (!context.mounted) {
+              return false;
+            }
+
+            if (ref.read(authProvider).isLocked) {
+              return false;
+            }
+
+            return ModalRoute.of(context)?.isCurrent == true;
+          },
+        );
   }
 }

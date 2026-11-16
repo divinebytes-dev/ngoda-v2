@@ -1,10 +1,13 @@
 // supabase/functions/_shared/supabase-client.ts
 
+// import {
+//   createClient,
+//   type SupabaseClient,
+// } from "jsr:@supabase/supabase-js@2";
 import {
   createClient,
   type SupabaseClient,
-} from "jsr:@supabase/supabase-js@2";
-
+} from "npm:@supabase/supabase-js@2.118.0";
 import type { Database } from "./database.types.ts";
 import { AppError } from "./app-error.ts";
 

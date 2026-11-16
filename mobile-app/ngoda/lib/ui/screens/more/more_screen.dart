@@ -13,6 +13,8 @@ import 'package:ngoda/ui/navigation/get_more_screen_menu_items.dart';
 import 'package:ngoda/ui/screens/auth/providers/auth_provider.dart';
 import 'package:ngoda/ui/shared/app_text_styles.dart';
 import 'package:ngoda/ui/widgets/bottom_nav.dart';
+import 'package:ngoda/ui/widgets/engagement_settings_section.dart';
+import 'package:ngoda/ui/widgets/more_tile.dart';
 
 class MoreScreen extends ConsumerWidget {
   const MoreScreen({super.key});
@@ -66,14 +68,14 @@ class MoreScreen extends ConsumerWidget {
               _SectionCard(
                 title: 'Account',
                 children: [
-                  _MoreTile(
+                  MoreTile(
                     icon: Icons.person_outline,
                     label: 'Profile',
                     onTap: () {
                       context.push('/profile');
                     },
                   ),
-                  _MoreTile(
+                  MoreTile(
                     icon: Icons.security_outlined,
                     label: 'Security',
                     onTap: () {
@@ -88,7 +90,7 @@ class MoreScreen extends ConsumerWidget {
                 _SectionCard(
                   title: 'Activity',
                   children: items.map((item) {
-                    return _MoreTile(
+                    return MoreTile(
                       icon: item.icon,
                       label: item.label,
                       onTap: () {
@@ -101,10 +103,17 @@ class MoreScreen extends ConsumerWidget {
 
               SizedBox(height: spacing.md),
 
+              const _SectionCard(
+                title: 'App',
+                children: [EngagementSettingsSection()],
+              ),
+
+              SizedBox(height: spacing.md),
+
               _SectionCard(
                 title: 'System',
                 children: [
-                  _MoreTile(
+                  MoreTile(
                     icon: Icons.logout,
                     label: 'Logout',
                     isDestructive: true,
@@ -176,70 +185,6 @@ class _SectionCard extends StatelessWidget {
           SizedBox(height: spacing.sm),
           ...children,
         ],
-      ),
-    );
-  }
-}
-
-class _MoreTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool isDestructive;
-  final bool showChevron;
-
-  const _MoreTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.isDestructive = false,
-    this.showChevron = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final spacing = context.spacing;
-    final radius = context.radius;
-    final iconSize = context.iconSize;
-    final colorScheme = context.colorScheme;
-
-    final color = isDestructive ? colorScheme.error : colorScheme.primary;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(radius.borderRadius),
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: spacing.sm),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(spacing.sm),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(radius.borderRadius),
-              ),
-              child: Icon(icon, color: color, size: iconSize.medium),
-            ),
-            SizedBox(width: spacing.md),
-            Expanded(
-              child: Text(
-                label,
-                style: AppTextStyles.small(context).copyWith(
-                  color: isDestructive
-                      ? colorScheme.error
-                      : colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            if (showChevron)
-              Icon(
-                Icons.chevron_right,
-                size: iconSize.medium,
-                color: colorScheme.onSurfaceVariant,
-              ),
-          ],
-        ),
       ),
     );
   }

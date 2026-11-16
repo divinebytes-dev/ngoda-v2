@@ -577,7 +577,12 @@ class _SendCashScreenState extends ConsumerState<SendCashScreen> {
         return;
       }
 
-      await TransactionLoyaltyCelebrationService.show(context, loyaltyResult);
+      // await TransactionLoyaltyCelebrationService.show(context, loyaltyResult);
+      await TransactionLoyaltyCelebrationService.showAndRequestReview(
+        context,
+        loyaltyResult,
+        ref: ref,
+      );
 
       if (!mounted) {
         return;

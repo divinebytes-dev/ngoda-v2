@@ -6,6 +6,8 @@ import 'package:ngoda/data_models/commission/settlement_items_page.dart';
 import 'package:ngoda/data_models/params/settlement_items_params.dart';
 import 'package:ngoda/services/number_format_service.dart';
 import 'package:ngoda/services/screen_scaling_service.dart';
+import 'package:ngoda/ui/extensions/app_size.dart';
+import 'package:ngoda/ui/extensions/theme_extension.dart';
 import 'package:ngoda/ui/screens/finance/providers/commission_settlement_items_provider.dart';
 import 'package:ngoda/ui/shared/app_text_styles.dart';
 import 'package:ngoda/ui/widgets/app_empty_state.dart';
@@ -255,6 +257,9 @@ class _SettlementSummaryCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(
           ScreenScalingService.scaleSize(context, 16),
         ),
+        border: Border.all(
+          color: context.colorScheme.outlineVariant..withValues(alpha: 0.09),
+        ),
       ),
       child: Column(
         children: [
@@ -308,6 +313,9 @@ class _SettlementItemCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: context.colorScheme.outlineVariant..withValues(alpha: 0.09),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -575,7 +583,7 @@ class _SectionHeader extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(context.radius.cardRadius),
           ),
           child: Text(
             trailing,

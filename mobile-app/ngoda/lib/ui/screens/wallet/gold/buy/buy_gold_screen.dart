@@ -623,7 +623,12 @@ class _BuyGoldState extends ConsumerState<BuyGold>
 
       notifier.reset();
 
-      await TransactionLoyaltyCelebrationService.show(context, loyaltyResult);
+      // await TransactionLoyaltyCelebrationService.show(context, loyaltyResult);
+      await TransactionLoyaltyCelebrationService.showAndRequestReview(
+        context,
+        loyaltyResult,
+        ref: ref,
+      );
     } catch (error) {
       if (!mounted) return;
 

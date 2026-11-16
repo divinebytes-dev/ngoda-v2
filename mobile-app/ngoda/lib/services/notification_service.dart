@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:timezone/data/latest.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -15,16 +17,15 @@ import 'package:ngoda/ui/screens/customer/services/customer_api_service_provider
 import 'package:ngoda/ui/screens/finance/providers/transactions_config_provider.dart';
 import 'package:ngoda/ui/screens/finance/providers/transactions_v_provider.dart';
 import 'package:ngoda/ui/screens/wallet/transactions/provider/max_tap_payment_amount_provider.dart';
-// import 'package:ngoda/ui/screens/customer/services/customer_api_service_provider.dart';
-// import 'package:ngoda/ui/screens/finance/provider/transactions_config_provider.dart';
-// import 'package:ngoda/ui/screens/finance/provider/transactions_v_provider.dart';
-// import 'package:ngoda/ui/screens/wallet/transactions/provider/max_tap_payment_amount_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class NotificationService {
   NotificationService({required this._supabase});
 
   final SupabaseClient _supabase;
+
+  static const int _engagementReminderId = 2147483646;
+  static const String _engagementPayload = 'ngoda:engagement';
 
   static const String _notificationChannelId = 'wallet_notifications';
 
@@ -138,6 +139,12 @@ class NotificationService {
   Future<void> _handleLocalNotificationResponse(
     NotificationResponse response,
   ) async {
+    // A reminder opens the app through its normal auth/lock flow.
+    // It has no notifications-table row to mark read or fetch.
+    if (response.payload == _engagementPayload) {
+      return;
+    }
+
     final notificationId = response.payload?.trim();
 
     if (notificationId == null || notificationId.isEmpty) {
@@ -312,7 +319,9 @@ class NotificationService {
      */
     final value = notificationId.hashCode & 0x7fffffff;
 
-    return value == _summaryNotificationId ? 1 : value;
+    return value == _summaryNotificationId || value == _engagementReminderId
+        ? 1
+        : value;
   }
 
   Future<void> _showUnreadSummary() async {
@@ -620,6 +629,49 @@ class NotificationService {
     } catch (error, stackTrace) {
       _log.warning('Deep-link initialization failed.', error, stackTrace);
     }
+  }
+
+  Future<bool> scheduleEngagementReminder({
+    required DateTime when,
+    required String body,
+  }) async {
+    if (!_initialized || (!Platform.isAndroid && !Platform.isIOS)) {
+      return false;
+    }
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    if (settings.authorizationStatus != AuthorizationStatus.authorized &&
+        settings.authorizationStatus != AuthorizationStatus.provisional) {
+      return false;
+    }
+    if (!when.isAfter(DateTime.now())) {
+      return false;
+    }
+    tz_data.initializeTimeZones();
+    await _localNotifications.zonedSchedule(
+      id: _engagementReminderId,
+      title: 'Check in with Ngoda',
+      body: body,
+      // An absolute UTC instant works across device time zone changes.
+      scheduledDate: tz.TZDateTime.from(when.toUtc(), tz.UTC),
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'ngoda_engagement',
+          'App reminders',
+          channelDescription: 'Occasional reminders to return to Ngoda',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: _engagementPayload,
+    );
+    return true;
+  }
+
+  Future<void> cancelEngagementReminder() async {
+    // Also works during startup before Firebase permission setup completes.
+    await _localNotifications.cancel(id: _engagementReminderId);
   }
 
   Future<void> dispose() async {

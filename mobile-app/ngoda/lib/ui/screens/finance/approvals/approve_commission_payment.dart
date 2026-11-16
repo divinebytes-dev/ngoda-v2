@@ -224,7 +224,7 @@ class _BatchCard extends ConsumerWidget {
             ),
             onTap: () {
               context.push(
-                '/profile/approve-commission-settlement/entries',
+                '/approve-commission-settlement/entries',
                 extra: SettlementItemsParams(
                   batchId: batch.id,
                   currency: currency,

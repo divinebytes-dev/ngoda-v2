@@ -602,7 +602,12 @@ class _MakeQrPaymentScreenState extends ConsumerState<MakeQrPaymentScreen> {
         context.pop();
       }
 
-      await TransactionLoyaltyCelebrationService.show(context, loyaltyResult);
+      // await TransactionLoyaltyCelebrationService.show(context, loyaltyResult);
+      await TransactionLoyaltyCelebrationService.showAndRequestReview(
+        context,
+        loyaltyResult,
+        ref: ref,
+      );
 
       amountCtrl.clear();
       emailCtrl.clear();

@@ -380,7 +380,12 @@ class _MakeDepositScreenState extends ConsumerState<MakeDepositScreen> {
         return;
       }
 
-      await TransactionLoyaltyCelebrationService.show(context, loyaltyResult);
+      // await TransactionLoyaltyCelebrationService.show(context, loyaltyResult);
+      await TransactionLoyaltyCelebrationService.showAndRequestReview(
+        context,
+        loyaltyResult,
+        ref: ref,
+      );
 
       if (!mounted) {
         return;

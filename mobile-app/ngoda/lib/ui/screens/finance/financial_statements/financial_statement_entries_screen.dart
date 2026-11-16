@@ -487,7 +487,7 @@ class _EntryCard extends StatelessWidget {
               ],
             ),
             SizedBox(height: spacing.sm),
-            Divider(color: colorScheme.outlineVariant),
+            Divider(color: colorScheme.outlineVariant.withValues(alpha: 0.09)),
             SizedBox(height: spacing.sm),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -653,7 +653,7 @@ class _BalanceStatusCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(radius.borderRadius),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.09)),
       ),
       child: Row(
         children: [

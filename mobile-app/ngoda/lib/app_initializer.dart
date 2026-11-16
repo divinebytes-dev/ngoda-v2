@@ -1,5 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:ngoda/core/providers/notification_service_provider.dart';
+import 'package:ngoda/core/providers/user_engagement_service_provider.dart';
+import 'package:ngoda/services/app_update_service.dart';
+import 'package:ngoda/services/user_engagement_service.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,7 +41,8 @@ class AppInitializer extends ConsumerStatefulWidget {
   }
 }
 
-class _AppInitializerState extends ConsumerState<AppInitializer> {
+class _AppInitializerState extends ConsumerState<AppInitializer>
+    with WidgetsBindingObserver {
   final Logger _log = Logger('AppInitializer');
 
   bool _authenticatedServicesInitialized = false;
@@ -45,6 +50,7 @@ class _AppInitializerState extends ConsumerState<AppInitializer> {
   bool _nfcDialogShowing = false;
 
   late final NotificationService _notificationService;
+  late final UserEngagementService _engagementService;
 
   late final NotificationListenerService _notificationListenerService;
 
@@ -59,6 +65,14 @@ class _AppInitializerState extends ConsumerState<AppInitializer> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _engagementService = ref.read(userEngagementServiceProvider);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    unawaited(
+      _engagementService.setForeground(
+        lifecycle == null || lifecycle == AppLifecycleState.resumed,
+      ),
+    );
 
     _idleService = ref.read(idleServiceProvider);
 
@@ -77,9 +91,7 @@ class _AppInitializerState extends ConsumerState<AppInitializer> {
      */
     ref.read(supportedCountriesProvider);
 
-    _notificationService = NotificationService(
-      supabase: Supabase.instance.client,
-    );
+    _notificationService = ref.read(notificationServiceProvider);
 
     _notificationListenerService = NotificationListenerService(
       supabase: Supabase.instance.client,
@@ -378,6 +390,29 @@ class _AppInitializerState extends ConsumerState<AppInitializer> {
       _notificationListenerService.start();
 
       _idleService.start();
+
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await _engagementService.startSession(user.id);
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+
+        final context = widget.navigatorKey.currentContext;
+
+        if (context == null || !context.mounted) {
+          return;
+        }
+
+        unawaited(
+          ref
+              .read(appUpdateServiceProvider)
+              .checkUpdates(context, silent: true),
+        );
+      });
     } catch (error, stackTrace) {
       /*
        * Initialization did not complete.
@@ -397,6 +432,7 @@ class _AppInitializerState extends ConsumerState<AppInitializer> {
 
   void _stopAuthenticatedServices() {
     _authenticatedServicesInitialized = false;
+    unawaited(_engagementService.stopSession());
 
     _notificationListenerService.stop();
 
@@ -437,7 +473,20 @@ class _AppInitializerState extends ConsumerState<AppInitializer> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_engagementService.setForeground(true));
+    } else if (state == AppLifecycleState.paused) {
+      unawaited(_engagementService.setForeground(false));
+    }
+    // Ignore inactive: permission dialogs and biometric prompts also cause it.
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // Do not cancel the scheduled reminder on disposal: OS notifications must
+    // survive app termination. Explicit logout calls stopSession above.
     _notificationListenerService.stop();
 
     _notificationSubscription.cancel();

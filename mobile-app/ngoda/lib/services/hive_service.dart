@@ -33,6 +33,7 @@ class HiveService {
         _openBox<String>(HiveBoxName.referralCode),
         _openBox<bool>(HiveBoxName.nfcSupport),
         _openBox<String>(HiveBoxName.lastLoginIdentifier),
+        _openBox<String>(HiveBoxName.userEngagement),
       ]);
 
       _log.fine('Hive initialized successfully.');
@@ -201,4 +202,5 @@ abstract final class HiveBoxName {
 
   static const String nfcSupport = 'nfcSupportChecked';
   static const String lastLoginIdentifier = 'lastLoginIdentifier';
+  static const String userEngagement = 'userEngagement';
 }

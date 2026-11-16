@@ -134,22 +134,34 @@ class _TransactionBodyState extends State<_TransactionBody>
           child: TabBarView(
             controller: _tabController,
             children: currencies.map((currency) {
-              final batch = widget.settlementData.batchByCurrency(currency);
+              final batches = widget.settlementData.byCurrency(currency);
 
-              if (batch == null) {
+              if (batches.isEmpty) {
                 return const AppEmptyState(
                   message: 'No outstanding settlement batch',
                 );
               }
 
-              return SingleChildScrollView(
+              return ListView.separated(
                 padding: EdgeInsets.fromLTRB(
                   spacing.sm,
                   0,
                   spacing.sm,
                   spacing.lg,
                 ),
-                child: _SettlementBatchCard(currency: currency, batch: batch),
+                itemCount: batches.length,
+                separatorBuilder: (context, index) {
+                  return SizedBox(height: spacing.md);
+                },
+                itemBuilder: (context, index) {
+                  final batch = batches[index];
+
+                  return _SettlementBatchCard(
+                    key: ValueKey(batch.id),
+                    currency: currency,
+                    batch: batch,
+                  );
+                },
               );
             }).toList(),
           ),
@@ -160,7 +172,11 @@ class _TransactionBodyState extends State<_TransactionBody>
 }
 
 class _SettlementBatchCard extends StatelessWidget {
-  const _SettlementBatchCard({required this.currency, required this.batch});
+  const _SettlementBatchCard({
+    super.key,
+    required this.currency,
+    required this.batch,
+  });
 
   final String currency;
   final SettlementBatch batch;
