@@ -458,18 +458,18 @@ class FinanceApiService {
     return FiscalPeriodSummary.fromJson(data);
   }
 
-  Future<void> openNextFiscalYear() async {
-    await _functions.invokeVoid(
-      functionName: 'open-fiscal-periods',
-      method: HttpMethod.post,
-    );
-  }
+  // Future<void> openNextFiscalYear() async {
+  //   await _functions.invokeVoid(
+  //     functionName: 'open-fiscal-periods',
+  //     method: HttpMethod.post,
+  //   );
+  // }
 
-  Future<void> closeFiscalYear({required int fiscalYear}) async {
-    await _functions.invokeVoid(
-      functionName: 'close-fiscal-periods',
-      method: HttpMethod.post,
-      body: {'fiscal_year': fiscalYear},
-    );
-  }
+  // Future<void> closeFiscalYear({required int fiscalYear}) async {
+  //   await _functions.invokeVoid(
+  //     functionName: 'close-fiscal-periods',
+  //     method: HttpMethod.post,
+  //     body: {'fiscal_year': fiscalYear},
+  //   );
+  // }
 }

@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.18"
   }
   public: {
     Tables: {
@@ -262,6 +262,8 @@ export type Database = {
         Row: {
           agent_id: string
           batch_id: string
+          cash_offset_amount: number | null
+          commission_wallet_amount: number | null
           country_code: string
           currency_code: string
           error_message: string | null
@@ -277,6 +279,8 @@ export type Database = {
         Insert: {
           agent_id: string
           batch_id: string
+          cash_offset_amount?: number | null
+          commission_wallet_amount?: number | null
           country_code: string
           currency_code: string
           error_message?: string | null
@@ -292,6 +296,8 @@ export type Database = {
         Update: {
           agent_id?: string
           batch_id?: string
+          cash_offset_amount?: number | null
+          commission_wallet_amount?: number | null
           country_code?: string
           currency_code?: string
           error_message?: string | null
@@ -9280,6 +9286,10 @@ export type Database = {
         Returns: Json
       }
       round_down: { Args: { p_value: number }; Returns: number }
+      run_country_fiscal_year_rollover: {
+        Args: { p_country_code: string }
+        Returns: Json
+      }
       run_monthly_government_tax_batches: { Args: never; Returns: Json }
       run_weekly_agent_commission_batches: { Args: never; Returns: Json }
       save_gold_buy_execution_context: {
@@ -9945,6 +9955,7 @@ export type Database = {
         | "treasury"
         | "employee"
         | "merchant"
+        | "commission"
     }
     CompositeTypes: {
       amount_config: {
@@ -10543,6 +10554,7 @@ export const Constants = {
         "treasury",
         "employee",
         "merchant",
+        "commission",
       ],
     },
   },

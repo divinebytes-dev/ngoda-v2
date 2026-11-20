@@ -6,9 +6,7 @@ import 'package:ngoda/data_models/finance/fiscal_period_summary.dart';
 import 'package:ngoda/ui/extensions/app_size.dart';
 import 'package:ngoda/ui/extensions/theme_extension.dart';
 import 'package:ngoda/ui/screens/finance/providers/fiscal_periods_provider.dart';
-import 'package:ngoda/ui/screens/finance/providers/open_fiscal_year_provider.dart';
 import 'package:ngoda/ui/shared/app_text_styles.dart';
-import 'package:ngoda/ui/widgets/app_button.dart';
 import 'package:ngoda/ui/widgets/app_empty_state.dart';
 import 'package:ngoda/ui/widgets/app_error_state.dart';
 import 'package:ngoda/ui/widgets/app_loader.dart';
@@ -31,7 +29,7 @@ class _FiscalPeriodsScreenState extends ConsumerState<FiscalPeriodsScreen>
   void initState() {
     super.initState();
 
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 2, initialIndex: 1, vsync: this);
   }
 
   @override
@@ -148,8 +146,8 @@ class _FiscalPeriodsContent extends StatelessWidget {
               context,
             ).copyWith(fontWeight: FontWeight.w700),
             tabs: [
+              Tab(text: summary.previousFiscalYear.toString()),
               Tab(text: summary.currentFiscalYear.toString()),
-              Tab(text: summary.nextFiscalYear.toString()),
             ],
           ),
         ),
@@ -159,14 +157,12 @@ class _FiscalPeriodsContent extends StatelessWidget {
             controller: tabController,
             children: [
               _FiscalYearView(
-                fiscalYear: summary.currentFiscalYear,
-                periods: summary.currentPeriods,
-                isCurrentFiscalYear: true,
+                fiscalYear: summary.previousFiscalYear,
+                periods: summary.previousPeriods,
               ),
               _FiscalYearView(
-                fiscalYear: summary.nextFiscalYear,
-                periods: summary.nextPeriods,
-                isCurrentFiscalYear: false,
+                fiscalYear: summary.currentFiscalYear,
+                periods: summary.currentPeriods,
               ),
             ],
           ),
@@ -176,193 +172,47 @@ class _FiscalPeriodsContent extends StatelessWidget {
   }
 }
 
-class _FiscalYearView extends ConsumerWidget {
+class _FiscalYearView extends StatelessWidget {
   final int fiscalYear;
   final List<FiscalPeriod> periods;
-  final bool isCurrentFiscalYear;
 
-  const _FiscalYearView({
-    required this.fiscalYear,
-    required this.periods,
-    required this.isCurrentFiscalYear,
-  });
+  const _FiscalYearView({required this.fiscalYear, required this.periods});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final spacing = context.spacing;
-
-    final actionState = ref.watch(openFiscalYearProvider);
 
     final sortedPeriods = [...periods]
       ..sort((first, second) {
         return first.period.compareTo(second.period);
       });
 
-    final hasPeriods = sortedPeriods.isNotEmpty;
-
-    final hasOpenPeriods = sortedPeriods.any((period) => !period.isClosed);
-
-    final allPeriodsClosed = hasPeriods && !hasOpenPeriods;
-
-    return Column(
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.fromLTRB(
+        spacing.padding,
+        spacing.sm,
+        spacing.padding,
+        spacing.sm,
+      ),
       children: [
-        Expanded(
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.fromLTRB(
-              spacing.padding,
-              spacing.sm,
-              spacing.padding,
-              spacing.sm,
-            ),
-            children: [
-              _FiscalYearTitle(
-                fiscalYear: fiscalYear,
-                periodCount: sortedPeriods.length,
-              ),
-              SizedBox(height: spacing.sm),
-              if (!hasPeriods)
-                _NoPeriodsCard(fiscalYear: fiscalYear)
-              else ...[
-                const _PeriodTableHeader(),
-                ...sortedPeriods.map((period) {
-                  return _PeriodRow(period: period);
-                }),
-              ],
-            ],
-          ),
-        ),
-        _FiscalYearActions(
+        _FiscalYearTitle(
           fiscalYear: fiscalYear,
-          isCurrentFiscalYear: isCurrentFiscalYear,
-          hasPeriods: hasPeriods,
-          hasOpenPeriods: hasOpenPeriods,
-          allPeriodsClosed: allPeriodsClosed,
-          isLoading: actionState.isLoading,
-          onOpen: () async {
-            await _openFiscalYear(context: context, ref: ref);
-          },
-          onClose: () async {
-            await _closeFiscalYear(context: context, ref: ref);
-          },
+          periodCount: sortedPeriods.length,
+          closedPeriodCount: sortedPeriods
+              .where((period) => period.isClosed)
+              .length,
         ),
-        if (actionState.error != null)
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              spacing.padding,
-              0,
-              spacing.padding,
-              spacing.sm,
-            ),
-            child: AppErrorState(message: actionState.error!),
-          ),
+        SizedBox(height: spacing.sm),
+        if (sortedPeriods.isEmpty)
+          _NoPeriodsCard(fiscalYear: fiscalYear)
+        else ...[
+          const _PeriodTableHeader(),
+          ...sortedPeriods.map((period) {
+            return _PeriodRow(period: period);
+          }),
+        ],
       ],
-    );
-  }
-
-  Future<void> _openFiscalYear({
-    required BuildContext context,
-    required WidgetRef ref,
-  }) async {
-    if (periods.isNotEmpty) {
-      return;
-    }
-
-    final confirmed = await _confirmAction(
-      context: context,
-      title: 'Open Fiscal Year $fiscalYear',
-      message:
-          'Create the fiscal periods for fiscal year '
-          '$fiscalYear using the previous fiscal year '
-          'configuration?',
-      actionText: 'Open',
-    );
-
-    if (confirmed != true || !context.mounted) {
-      return;
-    }
-
-    final success = await ref
-        .read(openFiscalYearProvider.notifier)
-        .openFiscalYear();
-
-    if (!context.mounted || !success) {
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Fiscal year $fiscalYear opened successfully')),
-    );
-
-    ref.read(openFiscalYearProvider.notifier).reset();
-  }
-
-  Future<void> _closeFiscalYear({
-    required BuildContext context,
-    required WidgetRef ref,
-  }) async {
-    final hasOpenPeriods = periods.any((period) => !period.isClosed);
-
-    if (!hasOpenPeriods) {
-      return;
-    }
-
-    final confirmed = await _confirmAction(
-      context: context,
-      title: 'Close Fiscal Year $fiscalYear',
-      message:
-          'Close all open periods for fiscal year '
-          '$fiscalYear?',
-      actionText: 'Close',
-    );
-
-    if (confirmed != true || !context.mounted) {
-      return;
-    }
-
-    final success = await ref
-        .read(openFiscalYearProvider.notifier)
-        .closeFiscalYear(fiscalYear: fiscalYear);
-
-    if (!context.mounted || !success) {
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Fiscal year $fiscalYear closed successfully')),
-    );
-
-    ref.read(openFiscalYearProvider.notifier).reset();
-  }
-
-  Future<bool?> _confirmAction({
-    required BuildContext context,
-    required String title,
-    required String message,
-    required String actionText,
-  }) {
-    return showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(false);
-              },
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(true);
-              },
-              child: Text(actionText),
-            ),
-          ],
-        );
-      },
     );
   }
 }
@@ -370,11 +220,33 @@ class _FiscalYearView extends ConsumerWidget {
 class _FiscalYearTitle extends StatelessWidget {
   final int fiscalYear;
   final int periodCount;
+  final int closedPeriodCount;
 
-  const _FiscalYearTitle({required this.fiscalYear, required this.periodCount});
+  const _FiscalYearTitle({
+    required this.fiscalYear,
+    required this.periodCount,
+    required this.closedPeriodCount,
+  });
+
+  String get _yearStatus {
+    if (periodCount == 0) {
+      return 'Not configured';
+    }
+
+    if (closedPeriodCount == periodCount) {
+      return 'Closed';
+    }
+
+    if (closedPeriodCount == 0) {
+      return 'Open';
+    }
+
+    return 'Partially closed';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final spacing = context.spacing;
     final colorScheme = context.colorScheme;
 
     return Row(
@@ -387,11 +259,24 @@ class _FiscalYearTitle extends StatelessWidget {
             ).copyWith(fontWeight: FontWeight.w700),
           ),
         ),
-        Text(
-          '$periodCount periods',
-          style: AppTextStyles.tinyNumber(
-            context,
-          ).copyWith(color: colorScheme.onSurfaceVariant),
+        SizedBox(width: spacing.sm),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              _yearStatus,
+              style: AppTextStyles.tiny(context).copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              '$periodCount periods',
+              style: AppTextStyles.tinyNumber(
+                context,
+              ).copyWith(color: colorScheme.onSurfaceVariant),
+            ),
+          ],
         ),
       ],
     );
@@ -582,67 +467,6 @@ class _NoPeriodsCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _FiscalYearActions extends StatelessWidget {
-  final int fiscalYear;
-  final bool isCurrentFiscalYear;
-  final bool hasPeriods;
-  final bool hasOpenPeriods;
-  final bool allPeriodsClosed;
-  final bool isLoading;
-  final VoidCallback onOpen;
-  final VoidCallback onClose;
-
-  const _FiscalYearActions({
-    required this.fiscalYear,
-    required this.isCurrentFiscalYear,
-    required this.hasPeriods,
-    required this.hasOpenPeriods,
-    required this.allPeriodsClosed,
-    required this.isLoading,
-    required this.onOpen,
-    required this.onClose,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final spacing = context.spacing;
-    final colorScheme = context.colorScheme;
-
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(
-        spacing.padding,
-        spacing.sm,
-        spacing.padding,
-        spacing.padding,
-      ),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        border: Border(top: BorderSide(color: colorScheme.outlineVariant)),
-      ),
-      child: isCurrentFiscalYear
-          ? AppButton(
-              isPrimary: true,
-              text: allPeriodsClosed
-                  ? 'Fiscal Year $fiscalYear Closed'
-                  : 'Close Fiscal Year $fiscalYear',
-              isProcessing: isLoading,
-              onPressed: hasPeriods && hasOpenPeriods && !isLoading
-                  ? onClose
-                  : null,
-            )
-          : AppButton(
-              isPrimary: true,
-              text: hasPeriods
-                  ? 'Fiscal Year $fiscalYear Opened'
-                  : 'Open Fiscal Year $fiscalYear',
-              isProcessing: isLoading,
-              onPressed: !hasPeriods && !isLoading ? onOpen : null,
-            ),
     );
   }
 }

@@ -47,6 +47,7 @@ const walletOwnerTypes:
     "treasury",
     "employee",
     "merchant",
+    "commission"
   ];
 
 Deno.serve(async (request: Request) => {

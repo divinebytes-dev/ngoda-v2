@@ -15,6 +15,9 @@ class AgentDashboardService {
         agentWalletJson: Map<String, dynamic>.from(
           response['wallet']['agent'] as Map,
         ),
+        commissionWalletJson: Map<String, dynamic>.from(
+          response['wallet']['commission'] as Map,
+        ),
         customerWalletJson: Map<String, dynamic>.from(
           response['wallet']['customer'] as Map,
         ),

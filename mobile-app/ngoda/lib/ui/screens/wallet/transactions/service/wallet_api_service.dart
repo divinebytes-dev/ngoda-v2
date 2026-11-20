@@ -95,6 +95,19 @@ class WalletApiService {
     );
   }
 
+  Future<void> processCommissionWithdrawal(
+    TransactionData transaction,
+    SenderApproval approval,
+  ) async {
+    await _functions.invokeVoid(
+      functionName: 'commission-withdrawal',
+      body: {
+        'transaction': transaction.toJson(),
+        'approval': approval.toJson(),
+      },
+    );
+  }
+
   Future<void> creditAgentProcessUserWithdrawal(
     TransactionData transaction,
     SenderApproval approval,
@@ -115,6 +128,16 @@ class WalletApiService {
     await _functions.invokeVoid(
       functionName: 'voucher-payment',
       body: {'transaction': transaction.toJson(), 'voucher': voucher.toJson()},
+    );
+  }
+
+  Future<void> transferCommission({
+    required TransactionData transaction,
+  }) async {
+    await _functions.invokeData(
+      functionName: 'transfer-commission',
+      body: {'transaction': transaction.toJson()},
+      invalidResponseMessage: 'Invalid commission transfer response',
     );
   }
 

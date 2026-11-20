@@ -21,6 +21,7 @@ class VendorDashboardService {
 
       final agentWallet = wallet['agent'];
       final customerWallet = wallet['customer'];
+      final commissionWallet = wallet['commission'];
       final merchantWallet = wallet['merchant'];
 
       final dailySummary = response['dailySummary'];
@@ -57,10 +58,12 @@ class VendorDashboardService {
 
       final dashboard = VendorDashboard.fromJson(
         agentWalletJson: Map<String, dynamic>.from(agentWallet),
+        commissionWalletJson: Map<String, dynamic>.from(commissionWallet),
         customerWalletJson: Map<String, dynamic>.from(customerWallet),
         merchantWalletJson: Map<String, dynamic>.from(merchantWallet),
         dailySummaryJson: Map<String, dynamic>.from(dailySummary),
         loanSummaryJson: Map<String, dynamic>.from(loanSummary),
+
         currencies: currencies,
         blockchainBalances: blockchainBalances,
       );
