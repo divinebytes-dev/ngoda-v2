@@ -13,7 +13,6 @@ class WalletBalanceSummary {
   factory WalletBalanceSummary.fromJson(Map<String, dynamic> json) {
     final rawBlockchainBalances = json['blockchain_balances'];
 
-    print("jsob $json");
     final blockchainBalances = <BlockchainWalletBalance>[];
 
     if (rawBlockchainBalances is List) {

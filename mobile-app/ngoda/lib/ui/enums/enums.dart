@@ -55,7 +55,8 @@ enum UserRole {
   treasury,
   merchant,
   compliance,
-  vendor;
+  vendor,
+  disbursementClerk;
 
   static UserRole? fromJson(String? value) {
     return enumFromApiValue(values, value);

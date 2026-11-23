@@ -1,0 +1,19 @@
+{
+  "nodeModulesDir": "auto",
+  "imports": {
+    "@supabase/supabase-js": "jsr:@supabase/supabase-js@2",
+    "ethers": "npm:ethers@6",
+    "firebase-admin/app": "npm:firebase-admin@13.5.0/app",
+    "firebase-admin/messaging": "npm:firebase-admin@13.5.0/messaging"
+  },
+  
+  "compilerOptions": {
+    "lib": [
+      "deno.ns",
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "strict": true
+  }
+}

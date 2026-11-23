@@ -98,6 +98,7 @@ class BottomNav extends ConsumerWidget {
         '/more',
       ],
 
+      'reserve_bank' => const ['/user-dashboard', '/tax'],
       _ => const <String>[],
     };
 

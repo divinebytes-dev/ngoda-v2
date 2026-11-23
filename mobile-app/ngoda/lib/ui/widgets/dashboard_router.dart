@@ -13,6 +13,7 @@ import 'package:ngoda/ui/screens/home/compliance_dashboard_screen.dart';
 import 'package:ngoda/ui/screens/home/customer_dashboard_screen.dart';
 import 'package:ngoda/ui/screens/home/finance_dashboard_screen.dart';
 import 'package:ngoda/ui/screens/home/merchant_dashboard_screen.dart';
+import 'package:ngoda/ui/screens/home/reserve_bank_dashboard_screen.dart';
 import 'package:ngoda/ui/screens/home/treasury_dashboard_screen.dart';
 import 'package:ngoda/ui/screens/home/vendor_dashboard_screen.dart';
 
@@ -72,6 +73,8 @@ class DashboardRouter extends ConsumerWidget {
       'vendor' => const VendorDashboardScreen(),
 
       'compliance' => const ComplianceDashboardScreen(),
+
+      'reserve_bank' => const ReserveBankDashboardScreen(),
       _ => null,
     };
   }

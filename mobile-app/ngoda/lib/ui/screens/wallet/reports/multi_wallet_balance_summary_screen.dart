@@ -523,10 +523,7 @@ class _CurrencyBalanceCard extends StatelessWidget {
                   ),
                   SizedBox(height: spacing.xs),
                   Text(
-                    NumberFormatService.formatAmount(
-                      balance.usdValue,
-                      currency: 'usd',
-                    ),
+                    '≈ ${NumberFormatService.formatAmount(balance.usdValue, currency: 'usd')}',
                     style: AppTextStyles.tinyNumber(
                       context,
                     ).copyWith(color: colorScheme.onSurfaceVariant),
@@ -679,10 +676,7 @@ class _BlockchainBalanceRow extends StatelessWidget {
                   ),
                   SizedBox(height: spacing.xs),
                   Text(
-                    NumberFormatService.formatAmount(
-                      balance.usdValue,
-                      currency: 'usd',
-                    ),
+                    '≈ ${NumberFormatService.formatAmount(balance.usdValue, currency: 'usd')}',
                     style: AppTextStyles.tinyNumber(
                       context,
                     ).copyWith(color: colorScheme.onSurfaceVariant),

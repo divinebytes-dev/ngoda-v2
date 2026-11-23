@@ -18,6 +18,7 @@ import 'package:ngoda/core/router/routes/gold_routes.dart';
 import 'package:ngoda/core/router/routes/loan_routes.dart';
 import 'package:ngoda/core/router/routes/merchant_routes.dart';
 import 'package:ngoda/core/router/routes/rewards_routes.dart';
+import 'package:ngoda/core/router/routes/reserve_bank_routes.dart';
 import 'package:ngoda/core/router/routes/transaction_routes.dart';
 import 'package:ngoda/core/router/routes/treasury_routes.dart';
 import 'package:ngoda/core/router/routes/vendor_routes.dart';
@@ -80,6 +81,11 @@ final routerProvider = Provider<GoRouter>((ref) {
        * Administration.
        */
       ...adminRoutes,
+
+      /*
+       * Tax Payable Routes.
+       */
+      ...reserveBankRoutes,
     ],
   );
 });

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ngoda/core/router/utils/custom_page_transition.dart';
 import 'package:ngoda/data_models/transaction/transaction_data.dart';
 import 'package:ngoda/ui/screens/customer/cash/customer_cash_screen.dart';
+import 'package:ngoda/ui/screens/wallet/transactions/commission_screen.dart';
 import 'package:ngoda/ui/screens/wallet/transactions/create_payment_voucher_screen.dart';
 import 'package:ngoda/ui/screens/wallet/transactions/make_deposit_screen.dart';
 import 'package:ngoda/ui/screens/wallet/transactions/make_nfc_payment_screen.dart';
@@ -72,6 +73,12 @@ final List<GoRoute> agentRoutes = [
             MakeNFCPaymentScreen(paymentData: paymentData),
             state,
           );
+        },
+      ),
+      GoRoute(
+        path: 'commission',
+        pageBuilder: (_, state) {
+          return slidePage(CommissionScreen(), state);
         },
       ),
     ],

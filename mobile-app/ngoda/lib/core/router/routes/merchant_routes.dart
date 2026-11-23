@@ -4,6 +4,7 @@ import 'package:ngoda/core/router/utils/custom_page_transition.dart';
 import 'package:ngoda/data_models/transaction/transaction_data.dart';
 import 'package:ngoda/ui/screens/merchant/cash/merchant_cash_screen.dart';
 import 'package:ngoda/ui/screens/wallet/reports/commission_summary_screen.dart';
+import 'package:ngoda/ui/screens/wallet/transactions/commission_screen.dart';
 import 'package:ngoda/ui/screens/wallet/transactions/process_customer_withdrawal_screen.dart';
 import 'package:ngoda/ui/screens/wallet/transactions/receive_customer_deposit_screen.dart';
 import 'package:ngoda/ui/screens/wallet/transactions/receive_nfc_payment_screen.dart';
@@ -69,6 +70,12 @@ final List<GoRoute> merchantRoutes = [
     path: '/commission-summary',
     pageBuilder: (_, state) {
       return slidePage(CommissionSummaryScreen(), state);
+    },
+  ),
+  GoRoute(
+    path: 'commission',
+    pageBuilder: (_, state) {
+      return slidePage(CommissionScreen(), state);
     },
   ),
 ];

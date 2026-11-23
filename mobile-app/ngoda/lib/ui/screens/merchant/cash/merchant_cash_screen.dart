@@ -135,6 +135,16 @@ class MerchantCashScreen extends ConsumerWidget {
                           );
                         },
                       ),
+                      SizedBox(height: spacing.sm),
+                      ActionTile(
+                        title: 'Commission',
+                        subtitle: 'Withdraw commission',
+                        icon: Icons.upload,
+                        color: Colors.blue,
+                        onTap: () => context.push('/merchant-cash/commission'),
+                      ),
+
+                      SizedBox(height: spacing.sm),
                     ],
                   ),
                 ),

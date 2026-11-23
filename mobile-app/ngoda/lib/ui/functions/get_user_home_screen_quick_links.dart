@@ -19,6 +19,7 @@ List<AppIconButton> getUserHomeScreenQuickLinks({
     case UserRole.accounts:
     case UserRole.treasury:
     case UserRole.compliance:
+    case UserRole.disbursementClerk:
       return const [];
 
     case UserRole.merchant:
@@ -250,6 +251,16 @@ List<AppIconButton> getUserHomeScreenQuickLinks({
               context.push('/credit-agent');
             },
           ),
+
+        _quickLink(
+          label: 'Commission',
+          icon: Icons.money,
+          iconSize: iconSize,
+          color: primary,
+          onPressed: () {
+            context.push('/agent-cash/commission');
+          },
+        ),
       ];
 
     case UserRole.customer:

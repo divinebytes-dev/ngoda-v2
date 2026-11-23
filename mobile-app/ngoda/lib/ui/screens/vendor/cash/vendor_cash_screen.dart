@@ -173,6 +173,17 @@ class VendorCashScreen extends ConsumerWidget {
                             context.go('/vendor-cash/create-payment-voucher'),
                       ),
                       SizedBox(height: spacing),
+                      ActionTile(
+                        title: 'Process Commission',
+                        subtitle: 'Withdraw or Transfer your commission',
+                        icon: Icons.money,
+                        color: Colors.blue,
+                        onTap: () {
+                          context.push('/vendor-cash/commission');
+                        },
+                      ),
+
+                      SizedBox(height: spacing),
                     ],
                   ),
                 ),

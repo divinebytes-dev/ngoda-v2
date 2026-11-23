@@ -344,6 +344,30 @@ List<NavItem> getRoleNavItems(String? role, double iconSize, Color primary) {
         ),
       ];
 
+    case 'reserve_bank':
+      return [
+        NavItem(
+          route: '/user-dashboard',
+          destination: NavigationDestination(
+            icon: Icon(Icons.home_outlined, size: iconSize),
+            selectedIcon: Icon(Icons.home, size: iconSize, color: primary),
+            label: 'Home',
+          ),
+        ),
+        NavItem(
+          route: '/tax',
+          destination: NavigationDestination(
+            icon: Icon(Icons.monetization_on_outlined, size: iconSize),
+            selectedIcon: Icon(
+              Icons.monetization_on,
+              size: iconSize,
+              color: primary,
+            ),
+            label: 'Tax',
+          ),
+        ),
+      ];
+
     case 'customer':
       return _goldAndLoanNavigation(
         cashRoute: '/cash',
